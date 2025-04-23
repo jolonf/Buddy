@@ -19,8 +19,9 @@ struct BuddyApp: App {
     // Use the adaptor to connect our custom AppDelegate
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     
-    // Create the FolderViewModel here as a StateObject
+    // Create both ViewModels as StateObjects at the App level
     @StateObject private var folderViewModel = FolderViewModel()
+    @StateObject private var fileContentViewModel = FileContentViewModel()
     
     init() {
         #if os(macOS)
@@ -39,18 +40,21 @@ struct BuddyApp: App {
         WindowGroup {
             // Use NavigationSplitView for Sidebar + Content + Detail layout
             NavigationSplitView {
-                // Sidebar View
                 FolderView()
+                    // Optional: Set sidebar width constraints if needed
+                    // .navigationSplitViewColumnWidth(min: 180, ideal: 200, max: 400)
             } content: {
-                // Content View (Placeholder - could show file content later)
-                Text(folderViewModel.selectedItem?.name ?? "Select an item")
-                    .foregroundColor(.secondary)
+                FileContentView()
+                    // Suggest a larger ideal width for the content pane
+                    .navigationSplitViewColumnWidth(min: 300, ideal: 500)
             } detail: {
-                // Detail View (Primary interaction area)
                 ChatView()
+                    // Reduced width constraints for the detail pane
+                    .navigationSplitViewColumnWidth(min: 200, ideal: 300, max: 350)
             }
-            // Inject the FolderViewModel into the environment
+            // Inject both ViewModels into the environment
             .environmentObject(folderViewModel)
+            .environmentObject(fileContentViewModel)
         }
     }
 } 

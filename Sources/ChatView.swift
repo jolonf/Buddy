@@ -25,29 +25,10 @@ struct ChatView: View {
                     }
                 }
 
-                HStack {
-                    Text("Model:")
-                    Picker("Selected Model", selection: $viewModel.selectedModelId) {
-                        ForEach(viewModel.availableModels) { model in
-                            Text(model.id).tag(String?(model.id))
-                        }
-                    }
-                    .labelsHidden() // Hide the picker label itself
-                    .disabled(viewModel.isLoadingModels || viewModel.connectionError != nil || viewModel.availableModels.isEmpty)
-                    // Consider adding a refresh button
-                    Button { 
-                        Task { await viewModel.fetchModels() }
-                    } label: {
-                        Image(systemName: "arrow.clockwise")
-                    }
-                    .disabled(viewModel.isLoadingModels)
-                }
-                .padding(.horizontal)
-                
-                Divider()
+                // HStack with Picker and Refresh Button removed from here
             }
-            .padding(.top, 8) // Add some top padding for the new section
-            .padding(.bottom, 4)
+            .padding(.top, 8)
+            // Removed bottom padding from top section
             
             // Scrollable chat message area
             ScrollView {
@@ -72,15 +53,37 @@ struct ChatView: View {
                 }
             }
 
-            Divider()
+            // Divider and Picker/Refresh row moved above input
+            Divider() 
+            HStack {
+                Picker("Selected Model", selection: $viewModel.selectedModelId) {
+                    ForEach(viewModel.availableModels) { model in
+                        Text(model.id).tag(String?(model.id))
+                    }
+                }
+                .labelsHidden()
+                .disabled(viewModel.isLoadingModels || viewModel.connectionError != nil || viewModel.availableModels.isEmpty)
+                
+                Button {
+                    Task { await viewModel.fetchModels() }
+                } label: {
+                    Image(systemName: "arrow.clockwise")
+                }
+                .disabled(viewModel.isLoadingModels)
+            }
+            .padding(.horizontal) // Only horizontal padding now
+            .padding(.top, 8) // Add some top padding
+            .padding(.bottom, 4) // Add some bottom padding before input
+            
+            Divider() // Add divider between picker and input
 
             // Input area
             HStack {
-                TextField("Type your message...", text: $viewModel.currentInput, axis: .vertical) // Allow vertical expansion
+                TextField("Type your message...", text: $viewModel.currentInput, axis: .vertical)
                     .textFieldStyle(.plain)
-                    .lineLimit(1...5) // Limit vertical expansion
-                    .onSubmit(viewModel.sendMessage) // Send on pressing Enter
-                    .disabled(viewModel.isSendingMessage) // Disable while sending
+                    .lineLimit(1...5)
+                    .onSubmit(viewModel.sendMessage)
+                    .disabled(viewModel.isSendingMessage)
 
                 if viewModel.isSendingMessage {
                     // Show Stop button while sending
@@ -97,9 +100,11 @@ struct ChatView: View {
                     .keyboardShortcut(.return, modifiers: []) // Send on Enter (if not submitting via TextField)
                 }
             }
-            .padding()
+            // Add top padding to input row
+            .padding(.top, 8) 
+            .padding([.horizontal, .bottom])
         }
-        .frame(minWidth: 400, minHeight: 300) // Reasonable minimum size for chat content
+        .frame(minHeight: 300)
         .toolbar {
             ToolbarItemGroup(placement: .automatic) {
                 Button("Clear Chat", systemImage: "trash") {

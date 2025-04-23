@@ -20,8 +20,9 @@ let package = Package(
     targets: [
         .executableTarget(
             name: "Buddy",
-            path: "."
-            // Add dependencies, resources etc. here if needed
+            path: ".",
+            // Exclude the docs directory from the build target
+            exclude: ["docs"]
         )
     ]
 )

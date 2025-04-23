@@ -134,42 +134,68 @@ class FolderViewModel: ObservableObject {
     private func loadFolderContents(from url: URL) {
         isLoading = true
         accessError = nil
-        rootFileSystemItems = []
+        // Don't clear rootFileSystemItems immediately
+        // rootFileSystemItems = [] 
 
         guard url.startAccessingSecurityScopedResource() else {
-            accessError = "Permission error while loading folder contents."
-            isLoading = false
-            selectedFolderURL = nil
-            selectedFolderBookmarkData = nil
-            url.stopAccessingSecurityScopedResource()
+            // ... error handling ...
+            // Ensure we clear items if access fails here
+            self.rootFileSystemItems = []
             return
         }
         
         defer {
             isLoading = false
+            // Stop access ONLY if we are NOT monitoring this URL
+            // If monitoring is active, keep access
+            if folderMonitorSource == nil || self.selectedFolderURL != url {
+                 url.stopAccessingSecurityScopedResource()
+            }
         }
 
         do {
-            let contents = try FileManager.default.contentsOfDirectory(at: url, includingPropertiesForKeys: [.isDirectoryKey, .nameKey], options: .skipsHiddenFiles)
+            // 1. Get current items on disk
+            let diskUrls = try FileManager.default.contentsOfDirectory(at: url, includingPropertiesForKeys: [.isDirectoryKey, .nameKey], options: .skipsHiddenFiles)
             
-            var items: [FileSystemItem] = []
-            for itemUrl in contents {
-                let resourceValues = try itemUrl.resourceValues(forKeys: [.nameKey, .isDirectoryKey])
-                let name = resourceValues.name ?? itemUrl.lastPathComponent
+            // 2. Map existing items by URL for quick lookup
+            var existingItemsMap = Dictionary(uniqueKeysWithValues: rootFileSystemItems.map { ($0.url, $0) })
+            
+            var updatedItems: [FileSystemItem] = []
+
+            // 3. Process items currently on disk
+            for diskUrl in diskUrls {
+                let resourceValues = try diskUrl.resourceValues(forKeys: [.nameKey, .isDirectoryKey])
+                let name = resourceValues.name ?? diskUrl.lastPathComponent
                 let isDirectory = resourceValues.isDirectory ?? false
-                items.append(FileSystemItem(name: name, url: itemUrl, isDirectory: isDirectory, children: isDirectory ? nil : nil))
+
+                if let existingItem = existingItemsMap[diskUrl] {
+                    // Item exists, reuse it (preserves ID and children)
+                    // Optional: Update properties if they can change, e.g., name
+                    // if existingItem.name != name { existingItem.name = name } // Requires FileSystemItem.name to be var
+                    updatedItems.append(existingItem)
+                    existingItemsMap.removeValue(forKey: diskUrl) // Mark as processed
+                } else {
+                    // New item found on disk
+                    let newItem = FileSystemItem(name: name, url: diskUrl, isDirectory: isDirectory, children: isDirectory ? nil : nil)
+                    updatedItems.append(newItem)
+                }
             }
             
-            self.rootFileSystemItems = items.sorted { (item1, item2) -> Bool in
+            // Items remaining in existingItemsMap were deleted from disk - they are implicitly removed
+            // by not being added to updatedItems.
+
+            // 5. Sort and update the main array
+            self.rootFileSystemItems = updatedItems.sorted { (item1, item2) -> Bool in
                 if item1.isDirectory != item2.isDirectory {
-                    return item1.isDirectory // true (directory) comes before false (file)
+                    return item1.isDirectory
                 }
                 return item1.name.localizedStandardCompare(item2.name) == .orderedAscending
             }
             
         } catch {
             accessError = "Failed to load folder contents: \(error.localizedDescription)"
-            self.rootFileSystemItems = []
+            // On error, clear the list to avoid showing stale/incorrect data
+            self.rootFileSystemItems = [] 
         }
     }
     
@@ -268,7 +294,6 @@ class FolderViewModel: ObservableObject {
         
         source.setEventHandler { [weak self] in
             guard let self = self else { return }
-            let event = source.data
 
             guard let currentUrl = self.selectedFolderURL else {
                 return
