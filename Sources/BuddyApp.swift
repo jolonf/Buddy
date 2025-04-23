@@ -3,8 +3,24 @@ import SwiftUI
 import AppKit // Needed for NSApplication
 #endif
 
+// MARK: - AppDelegate
+// Conforms to NSApplicationDelegate to handle app lifecycle events
+class AppDelegate: NSObject, NSApplicationDelegate {
+    // This method is called when the last window of the application is closed.
+    // Returning true ensures the application terminates.
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+        return true
+    }
+}
+
 @main
 struct BuddyApp: App {
+    
+    // Use the adaptor to connect our custom AppDelegate
+    @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
+    
+    // Create the FolderViewModel here as a StateObject
+    @StateObject private var folderViewModel = FolderViewModel()
     
     init() {
         #if os(macOS)
@@ -21,7 +37,20 @@ struct BuddyApp: App {
      
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            // Use NavigationSplitView for Sidebar + Content + Detail layout
+            NavigationSplitView {
+                // Sidebar View
+                FolderView()
+            } content: {
+                // Content View (Placeholder - could show file content later)
+                Text(folderViewModel.selectedItem?.name ?? "Select an item")
+                    .foregroundColor(.secondary)
+            } detail: {
+                // Detail View (Primary interaction area)
+                ChatView()
+            }
+            // Inject the FolderViewModel into the environment
+            .environmentObject(folderViewModel)
         }
     }
 } 

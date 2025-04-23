@@ -1,7 +1,11 @@
 import SwiftUI
 
-struct ContentView: View {
+// Renamed from ContentView
+struct ChatView: View {
     // Instantiate the ViewModel
+    // NOTE: Should this ViewModel be passed in or stay @StateObject?
+    // For now, keep as StateObject, but might need refactoring later
+    // if state needs to be shared more broadly (e.g., with FolderView)
     @StateObject private var viewModel = ChatViewModel()
 
     var body: some View {
@@ -50,7 +54,8 @@ struct ContentView: View {
                 ScrollViewReader { proxy in // Allows scrolling to the bottom
                     LazyVStack(alignment: .leading) {
                         ForEach(viewModel.messages) { message in
-                            MessageView(message: message)
+                            // Use renamed message row view
+                            ChatMessageRow(message: message)
                                 .id(message.id) // ID for scrolling
                         }
                     }
@@ -94,7 +99,7 @@ struct ContentView: View {
             }
             .padding()
         }
-        .frame(minWidth: 400, minHeight: 300) // Give the window a reasonable default size
+        .frame(minWidth: 400, minHeight: 300) // Reasonable minimum size for chat content
         .toolbar {
             ToolbarItemGroup(placement: .automatic) {
                 Button("Clear Chat", systemImage: "trash") {
@@ -107,8 +112,8 @@ struct ContentView: View {
     }
 }
 
-/// A view to display a single chat message.
-struct MessageView: View {
+// Renamed from MessageView
+struct ChatMessageRow: View {
     let message: ChatMessage
 
     // Computed property handles newline normalization for assistant message display
@@ -165,4 +170,8 @@ struct MessageView: View {
         }
         .padding(.vertical, 4)
     }
+}
+
+#Preview {
+    ChatView()
 } 
