@@ -1,0 +1,29 @@
+# macOS Files
+.DS_Store
+._*
+
+# Swift Package Manager / Build Artifacts
+/.build/
+/.swiftpm/
+
+# Xcode Project Data (User-Specific)
+*.xcodeproj/project.xcworkspace/
+*.xcodeproj/xcuserdata/
+*.xcworkspace/contents.xcworkspacedata
+*.xcworkspace/xcuserdata/
+
+# Xcode Project Data (Shared - uncomment if you don't want to commit schemes etc.)
+# *.xcodeproj/project.xcworkspace/xcshareddata/
+# *.xcworkspace/xcshareddata/
+
+# Build results
+DerivedData/
+
+# User Authentication / Credentials
+.netrc
+
+# VS Code Settings (uncomment if you don't want to commit)
+# /.vscode/
+
+# Generated Package files (if applicable, e.g., from Playgrounds)
+# Package.*.swift

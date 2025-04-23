@@ -1,0 +1,22 @@
+{
+    "configurations": [
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:Buddy.swiftpm}",
+            "name": "Debug Buddy",
+            "program": "${workspaceFolder:Buddy.swiftpm}/.build/debug/Buddy",
+            "preLaunchTask": "swift: Build Debug Buddy"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:Buddy.swiftpm}",
+            "name": "Release Buddy",
+            "program": "${workspaceFolder:Buddy.swiftpm}/.build/release/Buddy",
+            "preLaunchTask": "swift: Build Release Buddy"
+        }
+    ]
+}
