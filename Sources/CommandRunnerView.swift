@@ -3,7 +3,7 @@ import SwiftUI
 struct CommandRunnerView: View {
     // Use StateObject for now, will likely change to EnvironmentObject
     // if created higher up as discussed
-    @StateObject private var viewModel = CommandRunnerViewModel()
+    @EnvironmentObject var viewModel: CommandRunnerViewModel
     
     // Access FolderViewModel for the current directory
     @EnvironmentObject var folderViewModel: FolderViewModel
@@ -69,6 +69,17 @@ struct CommandRunnerView: View {
                             }
                         }
                     }
+                    // Add .onKeyPress here
+                    .onKeyPress(keys: [.upArrow, .downArrow], action: { keyPress in
+                        if keyPress.key == .upArrow {
+                            viewModel.navigateHistoryUp()
+                            return .handled // Indicate we handled the key press
+                        } else if keyPress.key == .downArrow {
+                            viewModel.navigateHistoryDown()
+                            return .handled // Indicate we handled the key press
+                        }
+                        return .ignored // Allow other key presses to function normally
+                    })
                     // --- Disable if no folder selected --- 
                     .disabled(folderViewModel.selectedFolderURL == nil)
                 
@@ -116,5 +127,6 @@ struct CommandRunnerView: View {
 #Preview {
     CommandRunnerView()
         .environmentObject(FolderViewModel()) // Provide dummy FolderVM
+        .environmentObject(CommandRunnerViewModel()) // Provide dummy CommandRunnerVM
         .frame(height: 300)
 } 

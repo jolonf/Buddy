@@ -18,6 +18,11 @@ class CommandRunnerViewModel: ObservableObject {
     @Published var history: [CommandHistoryEntry] = []
     @Published var isRunning: Bool = false
     
+    // --- Command History Navigation ---
+    private var executedCommands: [String] = []
+    private var historyNavigationIndex: Int? = nil
+    private var currentInputBeforeHistory: String = ""
+
     // Reference to the running process
     private var currentProcess: Process?
     // FileHandles for reading pipes
@@ -44,7 +49,12 @@ class CommandRunnerViewModel: ObservableObject {
         let newEntry = CommandHistoryEntry(command: commandToRun)
         let entryID = newEntry.id
         history.append(newEntry)
+        // Only add unique consecutive commands to history
+        if executedCommands.last != commandToRun {
+            executedCommands.append(commandToRun)
+        }
         commandInput = "" // Clear input field
+        historyNavigationIndex = nil // Reset history navigation on new command
         isRunning = true
 
         Task {
@@ -151,8 +161,48 @@ class CommandRunnerViewModel: ObservableObject {
         // TODO: Implement log clearing
         print("Placeholder: Clear command log")
         history = []
+        historyNavigationIndex = nil // Reset history navigation
     }
     
     // --- Helpers ---
+
+    func navigateHistoryUp() {
+        guard !executedCommands.isEmpty else { return }
+
+        if historyNavigationIndex == nil {
+            // Starting navigation, save current input
+            currentInputBeforeHistory = commandInput
+            historyNavigationIndex = executedCommands.count - 1
+        } else if historyNavigationIndex! > 0 {
+            // Navigate further up
+            historyNavigationIndex! -= 1
+        } else {
+            // Already at the top
+            return
+        }
+
+        // Update input field
+        if let index = historyNavigationIndex {
+            commandInput = executedCommands[index]
+        }
+    }
+
+    func navigateHistoryDown() {
+        guard let currentIndex = historyNavigationIndex else {
+            // Not currently navigating history
+            return
+        }
+
+        if currentIndex < executedCommands.count - 1 {
+            // Navigate down
+            historyNavigationIndex! += 1
+            commandInput = executedCommands[historyNavigationIndex!]
+        } else {
+            // Reached the end, restore original input
+            historyNavigationIndex = nil
+            commandInput = currentInputBeforeHistory
+        }
+    }
+
     // TODO: Add helpers for appending output, handling termination
 } 
