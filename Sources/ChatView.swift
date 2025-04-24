@@ -54,7 +54,7 @@ struct ChatView: View {
             }
 
             // Divider and Picker/Refresh row moved above input
-            Divider() 
+            Divider()
             HStack {
                 Picker("Selected Model", selection: $viewModel.selectedModelId) {
                     ForEach(viewModel.availableModels) { model in

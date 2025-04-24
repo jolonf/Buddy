@@ -11,7 +11,7 @@ struct FileContentView: View {
             // --- Header/Toolbar Area (Placeholder) ---
             HStack {
                 // Display filename and dirty indicator (*)
-                Text("\(viewModel.fileURL?.lastPathComponent ?? "No File Selected")\(viewModel.isDirty ? "*" : "")")
+                Text("\(viewModel.fileURL?.lastPathComponent ?? "No File Selected")\(viewModel.isDirty ? " ●" : "")")
                     .font(.headline)
                     .padding(.leading)
                 Spacer()

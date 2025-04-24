@@ -19,9 +19,10 @@ struct BuddyApp: App {
     // Use the adaptor to connect our custom AppDelegate
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     
-    // Create both ViewModels as StateObjects at the App level
+    // Create all ViewModels as StateObjects at the App level
     @StateObject private var folderViewModel = FolderViewModel()
     @StateObject private var fileContentViewModel = FileContentViewModel()
+    @StateObject private var commandRunnerViewModel = CommandRunnerViewModel()
     
     init() {
         #if os(macOS)
@@ -44,17 +45,22 @@ struct BuddyApp: App {
                     // Optional: Set sidebar width constraints if needed
                     // .navigationSplitViewColumnWidth(min: 180, ideal: 200, max: 400)
             } content: {
-                FileContentView()
-                    // Suggest a larger ideal width for the content pane
-                    .navigationSplitViewColumnWidth(min: 300, ideal: 500)
+                // Use VSplitView for File Content and Command Runner
+                VSplitView {
+                    FileContentView()
+                    CommandRunnerView()
+                        // Optional: Set a default min height for the command runner
+                        // .frame(minHeight: 150) 
+                }
             } detail: {
                 ChatView()
                     // Reduced width constraints for the detail pane
                     .navigationSplitViewColumnWidth(min: 200, ideal: 300, max: 350)
             }
-            // Inject both ViewModels into the environment
+            // Inject all ViewModels into the environment
             .environmentObject(folderViewModel)
             .environmentObject(fileContentViewModel)
+            .environmentObject(commandRunnerViewModel)
         }
     }
 } 

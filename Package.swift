@@ -23,6 +23,6 @@ let package = Package(
             path: ".",
             // Exclude the docs directory from the build target
             exclude: ["docs"]
-        )
+)
     ]
 )

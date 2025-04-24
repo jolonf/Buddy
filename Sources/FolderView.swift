@@ -45,12 +45,6 @@ struct FolderView: View {
                  } actions: {
                      Button("Select Folder") { viewModel.selectFolder() }
                  }
-            } else if viewModel.rootFileSystemItems.isEmpty {
-                ContentUnavailableView {
-                    Label("Folder is Empty", systemImage: "folder")
-                } description: {
-                    Text("The selected folder does not contain any visible items.")
-                }
             } else {
                 // --- File List ---
                 List(viewModel.rootFileSystemItems, children: \.children, selection: $viewModel.selectedItem) { item in
@@ -89,3 +83,4 @@ struct FolderView: View {
     }
 }
 
+ 

@@ -5,7 +5,7 @@ struct ChatMessage: Identifiable, Codable {
     let id: UUID = UUID()
     let role: Role
     var content: String
-    
+
     // Performance Stats (local usage only, not part of API payload)
     var ttft: TimeInterval? // Time To First Token
     var tokenCount: Int?    // Approx. Tokens received (assuming 1 per non-empty chunk)
