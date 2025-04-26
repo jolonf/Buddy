@@ -23,6 +23,7 @@ class FolderViewModel: ObservableObject {
     // --- File System Monitoring ---
     private var folderMonitorSource: DispatchSourceFileSystemObject?
     private var monitoredFolderDescriptor: CInt = -1 // File descriptor for monitored URL
+    var urlToSelectAfterRefresh: URL? = nil // Store URL to select after monitor refreshes list (internal access)
     
     init() {
         // TODO: Load persisted bookmark on init
@@ -274,6 +275,42 @@ class FolderViewModel: ObservableObject {
         }
     }
 
+    // Helper to find an item by URL recursively
+    private func findItem(for url: URL, in items: [FileSystemItem]) -> FileSystemItem? {
+        for item in items {
+            if item.url == url {
+                return item
+            }
+            // Check children only if they exist (have been loaded)
+            if let children = item.children {
+                if let foundInChildren = findItem(for: url, in: children) {
+                    return foundInChildren
+                }
+            }
+        }
+        return nil
+    }
+
+    // Public method to select a file by its URL
+    public func selectFile(url: URL) {
+        print("Attempting to select file programmatically: \(url.path)")
+        // Search for the item corresponding to the URL in the current items
+        if let itemToSelect = findItem(for: url, in: rootFileSystemItems) {
+            // Check if it's already selected to avoid redundant updates
+            if self.selectedItem?.id != itemToSelect.id {
+                print("Found matching item: \(itemToSelect.name). Setting as selectedItem.")
+                self.selectedItem = itemToSelect
+            } else {
+                print("Item \(itemToSelect.name) is already selected.")
+            }
+        } else {
+            // This might happen if the folder contents haven't refreshed yet after a new file creation.
+            // Or if the file is in a subdirectory whose children haven't been loaded yet.
+            print("Could not find FileSystemItem for URL: \(url.path) in current root list or loaded children.")
+            // TODO: Potentially trigger lazy loading of parent directory children if needed?
+        }
+    }
+
     // MARK: - File System Monitoring Implementation
 
     private func stopMonitoring() {
@@ -320,21 +357,24 @@ class FolderViewModel: ObservableObject {
             // Reload the folder contents (updates the sidebar)
             self.loadFolderContents(from: currentUrl)
             
-            // --- Added: Trigger FileContentViewModel reload --- 
-            // Check if the file content view model exists and has a file loaded
+            // --- Post-Reload Actions ---
             if let contentVM = self.fileContentViewModel, 
                let displayedFileURL = contentVM.fileURL,
                contentVM.isPlainText
             {
-                // Check if the currently displayed file is inside the monitored folder
-                // (This is a basic check, might need refinement if monitoring links etc.)
                 if displayedFileURL.path.starts(with: currentUrl.path) {
                     print("Folder change detected, triggering reload for displayed file: \(displayedFileURL.lastPathComponent)")
-                    // Tell the content view model to reload its content from disk
                     contentVM.forceReloadFromDisk()
                 }
             }
-            // --------------------------------------------------
+            
+            // Check if we need to select a specific file after this refresh
+            if let urlToSelect = self.urlToSelectAfterRefresh {
+                print("Post-refresh: Attempting to select pending URL: \(urlToSelect.path)")
+                self.selectFile(url: urlToSelect) // Select file using the *updated* list
+                self.urlToSelectAfterRefresh = nil // Reset the pending selection
+            }
+            // --------------------------
         }
         
         source.setCancelHandler { [weak self] in

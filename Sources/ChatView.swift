@@ -9,6 +9,8 @@ struct ChatView: View {
     @EnvironmentObject var viewModel: ChatViewModel
     // Also need FolderViewModel for the Agent Mode toggle's context (though not used directly yet)
     @EnvironmentObject var folderViewModel: FolderViewModel
+    // Focus state for the chat input field
+    @FocusState private var isChatInputFocused: Bool
 
     var body: some View {
         VStack(spacing: 0) {
@@ -36,6 +38,13 @@ struct ChatView: View {
             ScrollView {
                 ScrollViewReader { proxy in // Allows scrolling to the bottom
                     LazyVStack(alignment: .leading) {
+                        // Add Chat header at the top of the scroll view
+                        Text("Chat")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                            .padding(.bottom, 8) // Add some space below the title
+                            .frame(maxWidth: .infinity, alignment: .center) // Center the title
+                        
                         ForEach(viewModel.messages) { message in
                             // Use renamed message row view
                             ChatMessageRow(message: message)
@@ -97,6 +106,7 @@ struct ChatView: View {
                     .textFieldStyle(.plain)
                     .lineLimit(1...5)
                     .onSubmit(viewModel.sendMessage)
+                    .focused($isChatInputFocused) // Bind focus state
 
                 if viewModel.isSendingMessage {
                     // Show Stop button while sending
@@ -118,6 +128,9 @@ struct ChatView: View {
             .padding([.horizontal, .bottom])
         }
         .frame(minHeight: 300)
+        .onAppear { // Set initial focus when the view appears
+            isChatInputFocused = true
+        }
         .toolbar {
             ToolbarItemGroup(placement: .automatic) {
                 Button("Clear Chat", systemImage: "trash") {

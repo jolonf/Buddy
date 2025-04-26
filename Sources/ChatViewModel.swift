@@ -39,7 +39,8 @@ struct StreamChunk: Decodable {
 }
 
 // Define Interaction Mode
-enum InteractionMode {
+// Make enum RawRepresentable with String raw values for AppStorage
+enum InteractionMode: String {
     case ask
     case agent
 }
@@ -57,7 +58,8 @@ class ChatViewModel: ObservableObject {
     @Published var currentInput: String = ""
     @Published var isSendingMessage: Bool = false // Track sending state
     @Published var isThinking: Bool = false
-    @Published var interactionMode: InteractionMode = .ask // Default to .ask
+    // Persist interactionMode using AppStorage
+    @AppStorage("interactionMode") var interactionMode: InteractionMode = .ask // Default to .ask if not set
 
     // --- LM Studio Connection State ---
     @Published var serverURL: String = "http://localhost:1234" // Default, can be configured later
@@ -475,6 +477,11 @@ class ChatViewModel: ObservableObject {
                 ACTION_RESULT: EDIT_FILE(path='\(relativePath)')
                 STATUS: SUCCESS
                 """ // DIFF section removed
+                
+                // --- Signal FolderViewModel to select the edited file after refresh ---
+                folderViewModel.urlToSelectAfterRefresh = fileURL
+                // ---------------------------------------------------------------------
+
             } catch {
                  resultString = formatErrorResult(action: action, message: "Failed to write file: \(error.localizedDescription)")
             }
