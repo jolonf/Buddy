@@ -161,14 +161,21 @@ struct ChatMessageRow: View {
 
     // Helper to format action messages
     private func formatActionMessage(_ action: ParsedAction) -> String {
-        let path = action.parameters["path"] ?? "(unknown path)"
         switch action.name {
         case "READ_FILE":
+            let path = action.parameters["path"] ?? "(unknown path)"
             return "Reading file `\(path)`..."
         case "LIST_DIR":
+            let path = action.parameters["path"] ?? "."
             return "Listing directory `\(path)`..."
         case "EDIT_FILE":
+            let path = action.parameters["path"] ?? "(unknown path)"
             return "Editing file `\(path)`..."
+        case "RUN_COMMAND":
+            let command = action.parameters["command"] ?? "(unknown command)"
+            // Keep command short for display if needed, or show full?
+            // Let's show full for now, capped by UI if necessary.
+            return "Running command `\(command)`..."
         default:
             return "Performing action `\(action.name)`..."
         }

@@ -1,5 +1,6 @@
 import SwiftUI
 import Foundation
+import Combine
 
 // Placeholder struct for command history entries
 struct CommandHistoryEntry: Identifiable, Equatable {
@@ -8,6 +9,13 @@ struct CommandHistoryEntry: Identifiable, Equatable {
     var output: String = ""
     var exitCode: Int32? = nil
     // Add timestamps, etc. later if needed
+}
+
+// Result structure for executed commands
+struct CommandResult {
+    let stdout: String
+    let stderr: String
+    let exitCode: Int32
 }
 
 @MainActor
@@ -205,4 +213,63 @@ class CommandRunnerViewModel: ObservableObject {
     }
 
     // TODO: Add helpers for appending output, handling termination
+
+    // --- New Helper for Agent Commands ---
+    @MainActor
+    func addCompletedAgentCommandToHistory(command: String, result: CommandResult) {
+        // Combine stdout and stderr for display, similar to how runCommand handles stderr
+        var combinedOutput = result.stdout
+        if !result.stderr.isEmpty {
+            combinedOutput += "\n[STDERR]:\n" + result.stderr
+        }
+        
+        let entry = CommandHistoryEntry(
+            command: command, 
+            output: combinedOutput.trimmingCharacters(in: .whitespacesAndNewlines), // Trim output
+            exitCode: result.exitCode
+        )
+        history.append(entry)
+        
+        // Optionally, add to the executable command history for up/down arrows
+        if executedCommands.last != command {
+            executedCommands.append(command)
+        }
+        print("Added agent command '\(command)' to UI history.")
+    }
+
+    // Make this nonisolated as Process is thread-safe and we do blocking work
+    nonisolated func executeCommandForAgent(command: String, workingDirectory: URL) async -> CommandResult {
+        print("Agent executing command: '\(command)' in directory: \(workingDirectory.path)")
+
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/zsh") // Use zsh
+        process.arguments = ["-c", command] // Execute command string
+        process.currentDirectoryURL = workingDirectory
+
+        let outputPipe = Pipe()
+        let errorPipe = Pipe()
+        process.standardOutput = outputPipe
+        process.standardError = errorPipe
+
+        do {
+            try process.run()
+            // Read stdout synchronously AFTER process finishes
+            let stdOutputData = outputPipe.fileHandleForReading.readDataToEndOfFile()
+            // Read stderr synchronously AFTER process finishes
+            let stdErrorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
+            
+            process.waitUntilExit() // Wait for the process to finish
+
+            let stdoutString = String(data: stdOutputData, encoding: .utf8) ?? "Error decoding stdout"
+            let stderrString = String(data: stdErrorData, encoding: .utf8) ?? "Error decoding stderr"
+            let exitCode = process.terminationStatus
+
+            print("Agent command finished. Exit code: \(exitCode)")
+            return CommandResult(stdout: stdoutString, stderr: stderrString, exitCode: exitCode)
+
+        } catch {
+            print("Failed to run agent command: \(error)")
+            return CommandResult(stdout: "", stderr: "Failed to launch command: \(error.localizedDescription)", exitCode: -1)
+        }
+    }
 } 

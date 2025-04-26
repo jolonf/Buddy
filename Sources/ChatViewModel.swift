@@ -53,6 +53,8 @@ class ChatViewModel: ObservableObject {
 
     // Inject FolderViewModel
     private let folderViewModel: FolderViewModel
+    // Inject CommandRunnerViewModel
+    private let commandRunnerViewModel: CommandRunnerViewModel
 
     @Published var messages: [ChatMessage] = []
     @Published var currentInput: String = ""
@@ -71,8 +73,9 @@ class ChatViewModel: ObservableObject {
 
     private var apiTask: Task<Void, Never>? = nil // To manage the streaming task
 
-    init(folderViewModel: FolderViewModel) { // Accept FolderViewModel
-        self.folderViewModel = folderViewModel // Store it
+    init(folderViewModel: FolderViewModel, commandRunnerViewModel: CommandRunnerViewModel) { 
+        self.folderViewModel = folderViewModel 
+        self.commandRunnerViewModel = commandRunnerViewModel
         // Fetch models asynchronously on initialization
         Task {
             await fetchModels()
@@ -485,6 +488,31 @@ class ChatViewModel: ObservableObject {
             } catch {
                  resultString = formatErrorResult(action: action, message: "Failed to write file: \(error.localizedDescription)")
             }
+
+        case "RUN_COMMAND":
+            guard let commandString = action.parameters["command"], !commandString.isEmpty else {
+                return formatErrorResult(action: action, message: "Missing or empty 'command' parameter for RUN_COMMAND.")
+            }
+            // Execute command using CommandRunnerViewModel
+            let commandResult = await commandRunnerViewModel.executeCommandForAgent(
+                command: commandString, 
+                workingDirectory: workingDirectoryURL
+            )
+            // Format the result
+            resultString = """
+            ACTION_RESULT: RUN_COMMAND(command='\(commandString)')
+            EXIT_CODE: \(commandResult.exitCode)
+            STDOUT_START
+            \(commandResult.stdout.trimmingCharacters(in: .whitespacesAndNewlines))
+            STDOUT_END
+            STDERR_START
+            \(commandResult.stderr.trimmingCharacters(in: .whitespacesAndNewlines))
+            STDERR_END
+            """
+
+            // --- Add result to Command Runner UI History ---
+            commandRunnerViewModel.addCompletedAgentCommandToHistory(command: commandString, result: commandResult)
+            // ----------------------------------------------
 
         default:
              resultString = formatErrorResult(action: action, message: "Unknown action name \'\(action.name)\'.")

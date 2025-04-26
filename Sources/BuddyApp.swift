@@ -34,10 +34,12 @@ struct BuddyApp: App {
         let fileContentVM = FileContentViewModel()
         _fileContentViewModel = StateObject(wrappedValue: fileContentVM)
         
-        // Now create chatViewModel, passing folderVM
-        _chatViewModel = StateObject(wrappedValue: ChatViewModel(folderViewModel: folderVM))
         // Create commandRunnerViewModel (no dependencies)
-        _commandRunnerViewModel = StateObject(wrappedValue: CommandRunnerViewModel())
+        let commandRunnerVM = CommandRunnerViewModel()
+        _commandRunnerViewModel = StateObject(wrappedValue: commandRunnerVM)
+        
+        // Now create chatViewModel, passing folderVM and commandRunnerVM
+        _chatViewModel = StateObject(wrappedValue: ChatViewModel(folderViewModel: folderVM, commandRunnerViewModel: commandRunnerVM))
 
         // --- Connect ViewModels ---
         folderVM.setup(fileContentViewModel: fileContentVM)
