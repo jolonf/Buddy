@@ -47,7 +47,7 @@ struct BuddyApp: App {
     }
      
     var body: some Scene {
-        WindowGroup {
+        WindowGroup() {
             // Use NavigationSplitView for Sidebar + Content + Detail layout
             NavigationSplitView {
                 FolderView()

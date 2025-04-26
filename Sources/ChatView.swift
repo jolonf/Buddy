@@ -97,7 +97,6 @@ struct ChatView: View {
                     .textFieldStyle(.plain)
                     .lineLimit(1...5)
                     .onSubmit(viewModel.sendMessage)
-                    .disabled(viewModel.isSendingMessage)
 
                 if viewModel.isSendingMessage {
                     // Show Stop button while sending

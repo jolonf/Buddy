@@ -54,7 +54,18 @@ struct ChatMessageRow: View {
                             .padding(.horizontal, 5)
                             .padding(.vertical, 4)
                             .textSelection(.enabled)
-                        // TODO: Add back performance stats display if desired
+                        // Re-add performance stats display
+                        HStack(spacing: 10) {
+                            if let ttft = message.ttft {
+                                Text(String(format: "TTFT: %.3fs", ttft))
+                            }
+                            if let tps = message.tps {
+                                Text(String(format: "TPS: %.1f", tps))
+                            }
+                        }
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .padding(.leading, 5) // Align roughly with text padding
                     }
                 }
             }

@@ -9,17 +9,17 @@ struct FileContentView: View {
     var body: some View {
         VStack(spacing: 0) {
             // --- Header/Toolbar Area (Placeholder) ---
-            HStack {
-                // Display filename and dirty indicator (*)
-                Text("\(viewModel.fileURL?.lastPathComponent ?? "No File Selected")\(viewModel.isDirty ? " ●" : "")")
-                    .font(.headline)
-                    .padding(.leading)
-                Spacer()
-                // Potentially add Save button here later?
-            }
-            .frame(height: 30) // Example height
-            .background(.bar) // Use a bar background material
-            .padding(.bottom, 1) // Small separation
+            // HStack {
+            //     // Display filename and dirty indicator (*)
+            //     Text("\(viewModel.fileURL?.lastPathComponent ?? "No File Selected")\(viewModel.isDirty ? " ●" : "")")
+            //         .font(.headline)
+            //         .padding(.leading)
+            //     Spacer()
+            //     // Potentially add Save button here later?
+            // }
+            // .frame(height: 30) // Example height
+            // .background(.bar) // Use a bar background material
+            // .padding(.bottom, 1) // Small separation
 
             // --- Content Area ---
             Group { // Group allows applying modifiers conditionally later
@@ -85,6 +85,7 @@ struct FileContentView: View {
             .disabled(!viewModel.isDirty || viewModel.fileURL == nil || !viewModel.isPlainText)
             .hidden() // Keep the button invisible
         )
+        .navigationTitle(viewModel.fileURL?.lastPathComponent ?? "Buddy")
     }
 
     // Helper function to handle selection changes
