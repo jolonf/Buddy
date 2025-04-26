@@ -23,16 +23,25 @@ struct BuddyApp: App {
     @StateObject private var folderViewModel: FolderViewModel
     @StateObject private var chatViewModel: ChatViewModel
     @StateObject private var commandRunnerViewModel: CommandRunnerViewModel
-    @StateObject private var fileContentViewModel = FileContentViewModel()
+    @StateObject private var fileContentViewModel: FileContentViewModel
     
     init() {
         // Create folderViewModel first
         let folderVM = FolderViewModel()
         _folderViewModel = StateObject(wrappedValue: folderVM)
+        
+        // Create fileContentViewModel explicitly
+        let fileContentVM = FileContentViewModel()
+        _fileContentViewModel = StateObject(wrappedValue: fileContentVM)
+        
         // Now create chatViewModel, passing folderVM
         _chatViewModel = StateObject(wrappedValue: ChatViewModel(folderViewModel: folderVM))
         // Create commandRunnerViewModel (no dependencies)
         _commandRunnerViewModel = StateObject(wrappedValue: CommandRunnerViewModel())
+
+        // --- Connect ViewModels ---
+        folderVM.setup(fileContentViewModel: fileContentVM)
+        // --------------------------
         
         #if os(macOS)
         // Ensure the app behaves like a standard GUI app on macOS

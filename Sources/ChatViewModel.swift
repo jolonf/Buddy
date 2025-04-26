@@ -458,8 +458,6 @@ class ChatViewModel: ObservableObject {
                 return formatErrorResult(action: action, message: "Missing content block (CONTENT_START/END) for EDIT_FILE.")
             }
             let fileURL = workingDirectoryURL.appendingPathComponent(relativePath)
-            var _oldContent: String = "" // <-- Use underscore to silence warning
-            var diff: String = "(Diff generation not yet implemented)"
             
             do {
                 // Security check
@@ -467,23 +465,16 @@ class ChatViewModel: ObservableObject {
                     return formatErrorResult(action: action, message: "Access denied: Path is outside the selected folder.")
                 }
                 
-                // Read old content (optional, for diff - ignore errors if file doesn't exist)
-                _oldContent = (try? String(contentsOf: fileURL, encoding: .utf8)) ?? ""
-                
                 // Write new content
                 try newContent.write(to: fileURL, atomically: true, encoding: .utf8)
                 
-                // --- TODO: Implement actual Diff Generation --- 
-                // This is complex. Placeholder for now.
-                // diff = generateDiff(from: _oldContent, to: newContent)
-                // --------------------------------------------
+                // --- TODO: Implement Diff Generation (Deferred) --- 
                 
+                // Simplified Success Result String
                 resultString = """
                 ACTION_RESULT: EDIT_FILE(path='\(relativePath)')
                 STATUS: SUCCESS
-                DIFF:
-                \(diff)
-                """
+                """ // DIFF section removed
             } catch {
                  resultString = formatErrorResult(action: action, message: "Failed to write file: \(error.localizedDescription)")
             }

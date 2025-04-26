@@ -5,6 +5,9 @@ import UniformTypeIdentifiers // For UTType.folder
 @MainActor // Ensure UI updates are on the main thread
 class FolderViewModel: ObservableObject {
     
+    // Reference to the FileContentViewModel
+    private var fileContentViewModel: FileContentViewModel? = nil
+    
     // --- Persisted State --- 
     // Store the secure bookmark data for the selected folder
     @AppStorage("selectedFolderBookmarkData") private var selectedFolderBookmarkData: Data?
@@ -27,6 +30,11 @@ class FolderViewModel: ObservableObject {
         // TODO: Start security scope access
         // TODO: Load initial folder contents
         resolveBookmarkAndStartAccess() 
+    }
+    
+    // Method to connect the ViewModels
+    func setup(fileContentViewModel: FileContentViewModel) {
+        self.fileContentViewModel = fileContentViewModel
     }
     
     // --- Actions ---
@@ -295,16 +303,38 @@ class FolderViewModel: ObservableObject {
         source.setEventHandler { [weak self] in
             guard let self = self else { return }
 
+            // Keep existing logic to check access and reload folder
             guard let currentUrl = self.selectedFolderURL else {
+                self.accessError = "Monitoring event triggered but no folder selected."
+                self.stopAccessingCurrentBookmark()
                 return
             }
             
-            if currentUrl.startAccessingSecurityScopedResource() {
-                self.loadFolderContents(from: currentUrl)
-            } else {
+            guard currentUrl.startAccessingSecurityScopedResource() else {
                 self.accessError = "Permission to access the folder was lost. Please select it again."
                 self.stopAccessingCurrentBookmark()
+                return
             }
+            defer { currentUrl.stopAccessingSecurityScopedResource() } // Ensure access is stopped after handling
+
+            // Reload the folder contents (updates the sidebar)
+            self.loadFolderContents(from: currentUrl)
+            
+            // --- Added: Trigger FileContentViewModel reload --- 
+            // Check if the file content view model exists and has a file loaded
+            if let contentVM = self.fileContentViewModel, 
+               let displayedFileURL = contentVM.fileURL,
+               contentVM.isPlainText
+            {
+                // Check if the currently displayed file is inside the monitored folder
+                // (This is a basic check, might need refinement if monitoring links etc.)
+                if displayedFileURL.path.starts(with: currentUrl.path) {
+                    print("Folder change detected, triggering reload for displayed file: \(displayedFileURL.lastPathComponent)")
+                    // Tell the content view model to reload its content from disk
+                    contentVM.forceReloadFromDisk()
+                }
+            }
+            // --------------------------------------------------
         }
         
         source.setCancelHandler { [weak self] in

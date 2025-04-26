@@ -30,14 +30,18 @@ struct ChatMessageRow: View {
             }
 
             Group { // Group to apply common modifiers
-                // Check if it's an assistant message containing a parsable ACTION
-                if message.role == .assistant, let parsedAction = message.content.parseAsAction() {
-                    // Display formatted action text
+                // Check if the *first line* of an assistant message is a parsable ACTION
+                if message.role == .assistant,
+                   let firstLine = message.content.split(separator: "\n", maxSplits: 1).first,
+                   let parsedAction = String(firstLine).parseAsAction() 
+                {
+                    // Display formatted action text based on the *first line only*
                     Text(.init(formatActionMessage(parsedAction))) // Use Markdown for backticks
                         .italic()
                         .foregroundColor(.secondary)
                         .padding(.horizontal, 5) // Minimal padding like normal assistant msg
                         .padding(.vertical, 4)
+                        .textSelection(.enabled)
                 } else if message.role == .user {
                     // Apply bubble style to user messages
                     Text(message.content)
@@ -46,6 +50,7 @@ struct ChatMessageRow: View {
                         .background(Color.blue)
                         .foregroundColor(.white)
                         .cornerRadius(10)
+                        .textSelection(.enabled)
                 } else {
                     // Display regular assistant message content
                     // Re-introduce the VStack for potential stats later if needed
