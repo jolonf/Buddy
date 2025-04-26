@@ -20,11 +20,20 @@ struct BuddyApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     
     // Create all ViewModels as StateObjects at the App level
-    @StateObject private var folderViewModel = FolderViewModel()
+    @StateObject private var folderViewModel: FolderViewModel
+    @StateObject private var chatViewModel: ChatViewModel
+    @StateObject private var commandRunnerViewModel: CommandRunnerViewModel
     @StateObject private var fileContentViewModel = FileContentViewModel()
-    @StateObject private var commandRunnerViewModel = CommandRunnerViewModel()
     
     init() {
+        // Create folderViewModel first
+        let folderVM = FolderViewModel()
+        _folderViewModel = StateObject(wrappedValue: folderVM)
+        // Now create chatViewModel, passing folderVM
+        _chatViewModel = StateObject(wrappedValue: ChatViewModel(folderViewModel: folderVM))
+        // Create commandRunnerViewModel (no dependencies)
+        _commandRunnerViewModel = StateObject(wrappedValue: CommandRunnerViewModel())
+        
         #if os(macOS)
         // Ensure the app behaves like a standard GUI app on macOS
         // even when built as a command-line executable.
@@ -59,8 +68,9 @@ struct BuddyApp: App {
             }
             // Inject all ViewModels into the environment
             .environmentObject(folderViewModel)
-            .environmentObject(fileContentViewModel)
+            .environmentObject(chatViewModel)
             .environmentObject(commandRunnerViewModel)
+            .environmentObject(fileContentViewModel)
         }
     }
 } 

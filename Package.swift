@@ -21,8 +21,12 @@ let package = Package(
         .executableTarget(
             name: "Buddy",
             path: ".",
-            // Exclude the docs directory from the build target
-            exclude: ["docs"]
-)
+            // Exclude common directories from the build target
+            exclude: ["docs", ".git", ".gitignore", ".build", ".vscode", ".swiftpm"],
+            sources: ["Sources"], // Explicitly specify source directory
+            resources: [ // Add this resources block
+                .copy("Resources")
+            ]
+        )
     ]
 )

@@ -38,15 +38,26 @@ struct StreamChunk: Decodable {
     let choices: [Choice]
 }
 
+// Define Interaction Mode
+enum InteractionMode {
+    case ask
+    case agent
+}
+
 // MARK: - ViewModel
 
 /// Manages the state and logic for the chat view.
 @MainActor // Ensure UI updates happen on the main thread
 class ChatViewModel: ObservableObject {
 
+    // Inject FolderViewModel
+    private let folderViewModel: FolderViewModel
+
     @Published var messages: [ChatMessage] = []
     @Published var currentInput: String = ""
     @Published var isSendingMessage: Bool = false // Track sending state
+    @Published var isThinking: Bool = false
+    @Published var interactionMode: InteractionMode = .ask // Default to .ask
 
     // --- LM Studio Connection State ---
     @Published var serverURL: String = "http://localhost:1234" // Default, can be configured later
@@ -58,7 +69,8 @@ class ChatViewModel: ObservableObject {
 
     private var apiTask: Task<Void, Never>? = nil // To manage the streaming task
 
-    init() {
+    init(folderViewModel: FolderViewModel) { // Accept FolderViewModel
+        self.folderViewModel = folderViewModel // Store it
         // Fetch models asynchronously on initialization
         Task {
             await fetchModels()
@@ -112,6 +124,32 @@ class ChatViewModel: ObservableObject {
 
     // --- Chat Actions ---
 
+    private func loadSystemPrompt() -> String {
+        let filename = interactionMode == .agent ? "system_prompt_agent" : "system_prompt_ask"
+        
+        // Use Bundle.module to find resources within the package target
+        // It automatically handles the correct location within the build products (like _Buddy.bundle)
+        guard let fileURL = Bundle.module.url(forResource: filename, withExtension: "txt") else {
+            print("Error: System prompt file \(filename).txt not found within Bundle.module.")
+            // Fallback prompt if file loading fails
+            return "You are a helpful AI assistant."
+        }
+        
+        // Use the existing helper to load the content
+        return loadString(from: fileURL)
+    }
+
+    // Helper to load string content and handle errors
+    private func loadString(from url: URL) -> String {
+        do {
+            return try String(contentsOf: url, encoding: .utf8)
+        } catch {
+            print("Error loading system prompt from \(url): \(error)")
+            // Fallback prompt on read error
+            return "You are a helpful AI assistant."
+        }
+    }
+
     func sendMessage() {
         guard !currentInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
         guard let modelId = selectedModelId else {
@@ -134,9 +172,18 @@ class ChatViewModel: ObservableObject {
         messages.append(userMessage)
         let history = messages // Capture current history for the request
         currentInput = "" // Clear input field
+        
+        // --- Prepare message history including system prompt ---
+        var messagesForAPI: [ChatMessage] = []
+        let systemPrompt = loadSystemPrompt()
+        messagesForAPI.append(ChatMessage(role: .system, content: systemPrompt))
 
-        // Prepare request
-        let requestBody = ChatCompletionRequest(model: modelId, messages: history)
+        // Append conversation history (contains the actual user message)
+        messagesForAPI.append(contentsOf: history)
+        // -------------------------------------------------------
+
+        // Prepare request using the messagesForAPI list
+        let requestBody = ChatCompletionRequest(model: modelId, messages: messagesForAPI)
         guard let url = URL(string: serverURL + "/v1/chat/completions") else {
             connectionError = "Invalid chat completions URL."
             isSendingMessage = false
@@ -169,7 +216,7 @@ class ChatViewModel: ObservableObject {
         var assistantResponseMessage = ChatMessage(role: .assistant, content: "")
         var messageIndex: Int? = nil
         var firstTokenTime: Date? = nil
-        var tokenCount = 0 // <<< Renamed from charCount
+        var tokenCount = 0
         
         defer {
             // Ensure sending state is reset even if task is cancelled
@@ -187,7 +234,9 @@ class ChatViewModel: ObservableObject {
             }
 
             // Process the stream line by line
+            print("DEBUG: Starting stream processing for request starting at \(requestStartTime)") // Add timing info
             for try await line in bytes.lines {
+                print("DEBUG: Received line: \(line)") // <<< Log the raw line
                 if line.hasPrefix("data:"), let data = line.dropFirst(6).data(using: .utf8) {
                     if data.isEmpty || data == Data("[DONE]".utf8) { continue }
                     
@@ -251,11 +300,278 @@ class ChatViewModel: ObservableObject {
             }
             // ---------------------------------------------
             
+            // --- Action Parsing (After Stream Ends) ---
+            if interactionMode == .agent, let msgIndex = messageIndex, msgIndex < messages.count {
+                let finalContent = messages[msgIndex].content
+                // Don't await here, let it run concurrently
+                Task { 
+                    await parseAndExecuteActions(responseContent: finalContent, originalMessageIndex: msgIndex)
+                }
+            }
+            // ------------------------------------------
+
         } catch {
             if !Task.isCancelled {
                  connectionError = "Network error during chat: \(error.localizedDescription)"
              }
         }
+    }
+
+    // --- Action Parsing & Execution --- 
+
+    private func parseAndExecuteActions(responseContent: String, originalMessageIndex: Int) async {
+        print("--- Parsing Actions (Agent Mode) ---")
+        var actionFoundAndExecuted = false // Track if we need to send result
+        var actionResultString = ""       // Store result if found
+
+        let lines = responseContent.split(whereSeparator: \.isNewline)
+        var i = 0
+        while i < lines.count {
+            let line = String(lines[i]) // Use full line string
+            
+            // Try parsing the line as an action
+            if let parsedActionLine = line.parseAsAction() {
+                
+                var multiLineContent: String? = nil
+                var finalParsedAction = parsedActionLine // Start with parsed line
+                
+                // Handle multi-line content specifically for EDIT_FILE
+                if parsedActionLine.name == "EDIT_FILE" {
+                    var contentLines: [String] = []
+                    var foundStart = false
+                    var j = i + 1
+                    while j < lines.count {
+                        let contentLine = String(lines[j])
+                        if contentLine.trimmingCharacters(in: .whitespaces) == "CONTENT_START" {
+                            foundStart = true
+                        } else if contentLine.trimmingCharacters(in: .whitespaces) == "CONTENT_END" {
+                            if foundStart {
+                                multiLineContent = contentLines.joined(separator: "\n")
+                                i = j // Advance main loop past the content block
+                                break
+                            }
+                        } else if foundStart {
+                            contentLines.append(contentLine)
+                        }
+                        j += 1
+                    }
+                    if multiLineContent == nil {
+                        print("Warning: EDIT_FILE action found but CONTENT_START/CONTENT_END markers were missing or malformed.")
+                        // Decide if we should still proceed or return an error? For now, proceed without content.
+                    }
+                    // Update the action object with the found content
+                    finalParsedAction = ParsedAction(name: parsedActionLine.name, 
+                                                   parameters: parsedActionLine.parameters, 
+                                                   multiLineContent: multiLineContent)
+                }
+
+                // Print details
+                print("Parsed Action: \(finalParsedAction.name), Params: \(finalParsedAction.parameters)")
+                if let content = finalParsedAction.multiLineContent {
+                    print("  Multi-line Content:")
+                    print("---")
+                    print("\(content)")
+                    print("---")
+                }
+                
+                // --- Execute the action --- 
+                actionResultString = await execute(action: finalParsedAction) // Use potentially updated action
+                actionFoundAndExecuted = true
+                // --------------------------------
+                break // Assume one action per response
+            }
+            i += 1
+        }
+        print("--- Finished Parsing. Action found: \(actionFoundAndExecuted) ---")
+
+        // If an action was found and executed, send its result back
+        if actionFoundAndExecuted {
+            await sendResultToLLM(actionResult: actionResultString, historyUpToMessageIndex: originalMessageIndex)
+        }
+    }
+    
+    private func execute(action: ParsedAction) async -> String {
+        print("Executing action '\(action.name)'...")
+        
+        // Ensure we have a working directory from FolderViewModel
+        guard let workingDirectoryURL = folderViewModel.selectedFolderURL else {
+            return formatErrorResult(action: action, message: "No folder selected in the sidebar.")
+        }
+        
+        let fileManager = FileManager.default
+        let resultString: String
+
+        switch action.name {
+        case "READ_FILE":
+            guard let relativePath = action.parameters["path"], !relativePath.isEmpty else {
+                return formatErrorResult(action: action, message: "Missing or empty 'path' parameter for READ_FILE.")
+            }
+            let fileURL = workingDirectoryURL.appendingPathComponent(relativePath)
+            do {
+                // Security check: Ensure file is within the working directory
+                guard fileURL.path.starts(with: workingDirectoryURL.path) else {
+                    return formatErrorResult(action: action, message: "Access denied: Path is outside the selected folder.")
+                }
+                let content = try String(contentsOf: fileURL, encoding: .utf8)
+                resultString = """
+                ACTION_RESULT: READ_FILE(path='\(relativePath)')
+                STATUS: SUCCESS
+                CONTENT:
+                \(content)
+                """
+            } catch {
+                resultString = formatErrorResult(action: action, message: "Failed to read file: \(error.localizedDescription)")
+            }
+
+        case "LIST_DIR":
+            let relativePath = action.parameters["path"] ?? "." // Default to current dir if no path
+            let dirURL = workingDirectoryURL.appendingPathComponent(relativePath)
+            do {
+                // Security check
+                guard dirURL.path.starts(with: workingDirectoryURL.path) else {
+                    return formatErrorResult(action: action, message: "Access denied: Path is outside the selected folder.")
+                }
+                let items = try fileManager.contentsOfDirectory(at: dirURL, includingPropertiesForKeys: [.isDirectoryKey], options: .skipsHiddenFiles)
+                var listing = ""
+                for itemURL in items {
+                    var itemName = itemURL.lastPathComponent
+                    if let isDirectory = try? itemURL.resourceValues(forKeys: [.isDirectoryKey]).isDirectory, isDirectory == true {
+                        itemName += "/" // Append slash to directories
+                    }
+                    listing += itemName + "\n"
+                }
+                resultString = """
+                ACTION_RESULT: LIST_DIR(path='\(relativePath)')
+                STATUS: SUCCESS
+                LISTING:
+                \(listing.trimmingCharacters(in: .newlines))
+                """
+            } catch {
+                resultString = formatErrorResult(action: action, message: "Failed to list directory: \(error.localizedDescription)")
+            }
+
+        case "EDIT_FILE":
+            guard let relativePath = action.parameters["path"], !relativePath.isEmpty else {
+                return formatErrorResult(action: action, message: "Missing or empty 'path' parameter for EDIT_FILE.")
+            }
+            guard let newContent = action.multiLineContent else {
+                return formatErrorResult(action: action, message: "Missing content block (CONTENT_START/END) for EDIT_FILE.")
+            }
+            let fileURL = workingDirectoryURL.appendingPathComponent(relativePath)
+            var _oldContent: String = "" // <-- Use underscore to silence warning
+            var diff: String = "(Diff generation not yet implemented)"
+            
+            do {
+                // Security check
+                guard fileURL.path.starts(with: workingDirectoryURL.path) else {
+                    return formatErrorResult(action: action, message: "Access denied: Path is outside the selected folder.")
+                }
+                
+                // Read old content (optional, for diff - ignore errors if file doesn't exist)
+                _oldContent = (try? String(contentsOf: fileURL, encoding: .utf8)) ?? ""
+                
+                // Write new content
+                try newContent.write(to: fileURL, atomically: true, encoding: .utf8)
+                
+                // --- TODO: Implement actual Diff Generation --- 
+                // This is complex. Placeholder for now.
+                // diff = generateDiff(from: _oldContent, to: newContent)
+                // --------------------------------------------
+                
+                resultString = """
+                ACTION_RESULT: EDIT_FILE(path='\(relativePath)')
+                STATUS: SUCCESS
+                DIFF:
+                \(diff)
+                """
+            } catch {
+                 resultString = formatErrorResult(action: action, message: "Failed to write file: \(error.localizedDescription)")
+            }
+
+        default:
+             resultString = formatErrorResult(action: action, message: "Unknown action name \'\(action.name)\'.")
+        }
+
+        print("Action Result:")
+        print(resultString)
+        return resultString
+    }
+    
+    // Helper to format error results consistently
+    private func formatErrorResult(action: ParsedAction, message: String) -> String {
+        // Reconstruct original action string approximation for context
+        let paramsString = action.parameters.map { "\($0.key)='\($0.value)'" }.joined(separator: ", ")
+        let originalAction = "\(action.name)(\(paramsString))"
+        return """
+        ACTION_RESULT: \(originalAction)
+        STATUS: ERROR: \(message)
+        """
+    }
+
+    private func sendResultToLLM(actionResult: String, historyUpToMessageIndex: Int) async {
+        print("--- Sending Action Result Back to LLM ---")
+        guard let modelId = selectedModelId else {
+            print("Error: No model selected for sending action result.")
+            // How to handle this error? Maybe append to messages?
+            return
+        }
+        
+        // Prevent overlapping requests
+        guard !isSendingMessage else {
+            print("Already processing a message/action, cannot send result now.")
+            // TODO: Queue this or handle concurrency better?
+            return
+        }
+        isSendingMessage = true // Mark as busy
+        connectionError = nil
+
+        let resultWithInstruction = "Based on the following action result, please formulate a response for the user:\n\n\(actionResult)"
+
+        // --- Prepare message history in chronological order ---
+        var messagesForAPI: [ChatMessage] = []
+        let systemPrompt = loadSystemPrompt() // Use current mode's prompt
+        messagesForAPI.append(ChatMessage(role: .system, content: systemPrompt))
+        
+        // Append history UP TO and INCLUDING the message that requested the action
+        if historyUpToMessageIndex >= 0 && historyUpToMessageIndex < messages.count {
+             // Include the message that contained the ACTION request itself
+            messagesForAPI.append(contentsOf: messages[...historyUpToMessageIndex]) 
+        } else {
+            print("Warning: Invalid history index (\(historyUpToMessageIndex)) for sending action result.")
+            // Fallback: maybe send just the system prompt and the result? Or current full history?
+            // Let's stick to the intended history for now.
+        }
+
+        // Append the action result message AFTER the history
+        messagesForAPI.append(ChatMessage(role: .user, content: resultWithInstruction))
+        // ------------------------------------------------------
+
+        // Prepare request body
+        let requestBody = ChatCompletionRequest(model: modelId, messages: messagesForAPI)
+        guard let url = URL(string: serverURL + "/v1/chat/completions") else {
+            connectionError = "Invalid chat completions URL."
+            isSendingMessage = false
+            return
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+        do {
+            request.httpBody = try JSONEncoder().encode(requestBody)
+        } catch {
+            connectionError = "Failed to encode action result request: \(error.localizedDescription)"
+            isSendingMessage = false
+            return
+        }
+
+        // Reuse the streaming request logic (or create a non-streaming one if preferred)
+        // Note: The result of *this* call will be processed by performStreamingRequest again,
+        // which will update the UI with the LLM's response *after* processing the action result.
+        print("Calling performStreamingRequest for action result feedback...")
+        await performStreamingRequest(request: request, requestStartTime: Date())
+        // isSendingMessage will be reset by performStreamingRequest's defer block
     }
 
     // Function to cancel the stream if needed (e.g., stop button)

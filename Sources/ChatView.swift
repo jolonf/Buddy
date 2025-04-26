@@ -6,7 +6,9 @@ struct ChatView: View {
     // NOTE: Should this ViewModel be passed in or stay @StateObject?
     // For now, keep as StateObject, but might need refactoring later
     // if state needs to be shared more broadly (e.g., with FolderView)
-    @StateObject private var viewModel = ChatViewModel()
+    @EnvironmentObject var viewModel: ChatViewModel
+    // Also need FolderViewModel for the Agent Mode toggle's context (though not used directly yet)
+    @EnvironmentObject var folderViewModel: FolderViewModel
 
     var body: some View {
         VStack(spacing: 0) {
@@ -52,6 +54,18 @@ struct ChatView: View {
                     }
                 }
             }
+            .id("MessageListBottom") // For scrolling
+
+            // --- Agent Mode Toggle --- 
+            Toggle("Agent Mode", isOn: Binding(
+                get: { viewModel.interactionMode == .agent },
+                set: { isOn in
+                    viewModel.interactionMode = isOn ? .agent : .ask
+                }
+            ))
+            .toggleStyle(.checkbox) // Use checkbox style on macOS
+            .padding(.horizontal)
+            .padding(.bottom, 4)
 
             // Divider and Picker/Refresh row moved above input
             Divider()
@@ -117,66 +131,12 @@ struct ChatView: View {
     }
 }
 
-// Renamed from MessageView
-struct ChatMessageRow: View {
-    let message: ChatMessage
-
-    // Computed property handles newline normalization for assistant message display
-    private var processedAssistantContent: String {
-        guard message.role == .assistant else { return message.content } 
-        
-        var processed = message.content
-        processed = processed.replacingOccurrences(of: "\r\n", with: "\n") // Windows -> Unix
-        processed = processed.replacingOccurrences(of: "\r", with: "\n")   // Classic Mac -> Unix
-        // Collapse multiple blank lines (might need repeating or regex for >2)
-        processed = processed.replacingOccurrences(of: "\n\n", with: "\n") 
-        return processed
-    }
-    
-    var body: some View {
-        HStack {
-            if message.role == .user {
-                Spacer() // Push user messages to the right
-            }
-
-            if message.role == .user {
-                // Apply bubble style to user messages
-                Text(message.content)
-                    .padding(10)
-                    .background(Color.blue.opacity(0.7))
-                    .foregroundColor(.white)
-                    .cornerRadius(10)
-                    .textSelection(.enabled)
-            } else {
-                // Use processed content for assistant
-                VStack(alignment: .leading, spacing: 4) { // Wrap in VStack to place stats below
-                    Text(.init(processedAssistantContent))
-                        .padding(.horizontal, 5) // Minimal padding
-                        .textSelection(.enabled)
-                    
-                    // Display performance stats if available
-                    HStack(spacing: 10) {
-                        if let ttft = message.ttft {
-                            Text(String(format: "TTFT: %.3fs", ttft))
-                        }
-                        if let tps = message.tps {
-                            Text(String(format: "TPS: %.1f", tps))
-                        }
-                    }
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                    .padding(.leading, 5) // Align roughly with text padding
-                }
-            }
-
-            if message.role == .assistant {
-                Spacer() // Push assistant messages to the left
-            }
-        }
-        .padding(.vertical, 4)
-    }
-}
-
 #Preview {
-    ChatView()
+    // Create dummy view models for the preview
+    let folderVM = FolderViewModel()
+    // let chatVM = ChatViewModel(folderViewModel: folderVM) // No longer needed here
+    
+    return ChatView()
+        // Provide both view models to the environment for the preview
+        .environmentObject(folderVM)
 } 
