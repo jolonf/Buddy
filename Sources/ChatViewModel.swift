@@ -62,6 +62,8 @@ class ChatViewModel: ObservableObject {
     @Published var isThinking: Bool = false
     // Persist interactionMode using AppStorage
     @AppStorage("interactionMode") var interactionMode: InteractionMode = .ask // Default to .ask if not set
+    // Trigger for auto-scrolling chat on content updates
+    @Published var scrollTrigger: UUID = UUID()
 
     // --- LM Studio Connection State ---
     @Published var serverURL: String = "http://localhost:1234" // Default, can be configured later
@@ -277,6 +279,8 @@ class ChatViewModel: ObservableObject {
                                 messages[messageIndex!].content = assistantResponseMessage.content
                                 messages[messageIndex!].tokenCount = tokenCount // <<< Update token count
                             }
+                            // Update scroll trigger whenever content changes
+                            self.scrollTrigger = UUID() 
                         }
                         if chunk.choices.first?.finish_reason != nil {
                             break // End loop gracefully

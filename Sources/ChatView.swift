@@ -53,8 +53,8 @@ struct ChatView: View {
                     }
                     .padding(.horizontal)
                     .padding(.top)
-                    // Scroll to bottom when messages change
-                    .onChange(of: viewModel.messages.count) { _, _ in
+                    // Scroll to bottom when messages change OR content updates
+                    .onChange(of: viewModel.scrollTrigger) { _, _ in // Observe scrollTrigger
                         if let lastMessageId = viewModel.messages.last?.id {
                             withAnimation {
                                 proxy.scrollTo(lastMessageId, anchor: .bottom)
@@ -74,6 +74,7 @@ struct ChatView: View {
             ))
             .toggleStyle(.checkbox) // Use checkbox style on macOS
             .padding(.horizontal)
+            .padding(.top, 8) // Add top padding
             .padding(.bottom, 4)
 
             // Divider and Picker/Refresh row moved above input

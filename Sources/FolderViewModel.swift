@@ -311,6 +311,57 @@ class FolderViewModel: ObservableObject {
         }
     }
 
+    // --- File Deletion ---
+    func deleteItem(_ item: FileSystemItem) {
+        print("Attempting to delete item: \(item.url.path)")
+        
+        // Basic confirmation (can be enhanced later)
+        // Note: Alerts should ideally be handled in the View layer
+        // For now, just print confirmation request.
+        print("Confirmation required to delete \(item.name)")
+        // guard confirmDeletion() else { return } // Placeholder for future UI confirmation
+
+        // Ensure we have scope access (needed for deletion too)
+        guard let folderUrl = selectedFolderURL, folderUrl.startAccessingSecurityScopedResource() else {
+            accessError = "Permission error before deleting \(item.name)"
+             // Attempt to stop access if we failed to start it for the delete?
+            selectedFolderURL?.stopAccessingSecurityScopedResource() 
+            return
+        }
+        // Important: We need access to the PARENT directory containing the item to delete it.
+        // The scope we have is for selectedFolderURL.
+        // We also need to ensure the item URL itself is covered by this scope.
+        guard item.url.path.starts(with: folderUrl.path) else {
+             accessError = "Security Error: Attempt to delete item outside the selected folder scope."
+             folderUrl.stopAccessingSecurityScopedResource()
+             return
+        }
+
+        // Perform deletion
+        do {
+            try FileManager.default.removeItem(at: item.url)
+            print("Successfully deleted \(item.name)")
+            
+            // Refresh folder contents to reflect deletion
+            // Note: The directory monitor should also pick this up, 
+            // but calling it directly ensures faster UI update.
+            loadFolderContents(from: folderUrl)
+            
+            // Clear selection if the deleted item was selected
+            // if selectedItem?.id == item.id {
+            //     selectedItem = nil
+            // } 
+            // ^^^ Removed: Monitor handler will now handle clearing selection
+            
+        } catch {
+            print("Error deleting item \(item.name): \(error)")
+            accessError = "Failed to delete \(item.name): \(error.localizedDescription)"
+        }
+        
+        // Stop access started for deletion
+        folderUrl.stopAccessingSecurityScopedResource()
+    }
+
     // MARK: - File System Monitoring Implementation
 
     private func stopMonitoring() {
@@ -358,17 +409,20 @@ class FolderViewModel: ObservableObject {
             self.loadFolderContents(from: currentUrl)
             
             // --- Post-Reload Actions ---
-            if let contentVM = self.fileContentViewModel, 
-               let displayedFileURL = contentVM.fileURL,
-               contentVM.isPlainText
-            {
-                if displayedFileURL.path.starts(with: currentUrl.path) {
-                    print("Folder change detected, triggering reload for displayed file: \(displayedFileURL.lastPathComponent)")
-                    contentVM.forceReloadFromDisk()
+            if let contentVM = self.fileContentViewModel, let previouslyDisplayedURL = contentVM.fileURL {
+                if findItem(for: previouslyDisplayedURL, in: self.rootFileSystemItems) != nil {
+                    if contentVM.isPlainText {
+                        print("Folder change detected, triggering reload for existing displayed file: \(previouslyDisplayedURL.lastPathComponent)")
+                        contentVM.forceReloadFromDisk()
+                    }
+                } else {
+                    print("Displayed file \(previouslyDisplayedURL.lastPathComponent) was deleted. Clearing selection and display.")
+                    self.selectedItem = nil 
+                    contentVM.clearDisplay()
                 }
             }
             
-            // Check if we need to select a specific file after this refresh
+            // Check if we need to select a specific file (e.g., after agent EDIT_FILE)
             if let urlToSelect = self.urlToSelectAfterRefresh {
                 print("Post-refresh: Attempting to select pending URL: \(urlToSelect.path)")
                 self.selectFile(url: urlToSelect) // Select file using the *updated* list

@@ -59,11 +59,25 @@ struct FolderView: View {
                     .onAppear {
                         viewModel.loadChildrenIfNeeded(for: item)
                     }
+                    .contextMenu {
+                        Button("Delete", role: .destructive) {
+                            viewModel.deleteItem(item)
+                        }
+                    }
                 }
                 .listStyle(.sidebar)
             }
         }
         .frame(minWidth: 200, maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .background {
+            Button("Delete Selected Item") {
+                if let selected = viewModel.selectedItem {
+                    viewModel.deleteItem(selected)
+                }
+            }
+            .keyboardShortcut(.delete, modifiers: .command)
+            .hidden()
+        }
         .background(.regularMaterial)
         // Add the file importer modifier
         .fileImporter(

@@ -1,5 +1,9 @@
 import SwiftUI
 
+// --- Remove Subview for History Entries ---
+// struct CommandHistoryEntryView: View { ... }
+// ------------------------------------
+
 struct CommandRunnerView: View {
     // Use StateObject for now, will likely change to EnvironmentObject
     // if created higher up as discussed
@@ -17,31 +21,55 @@ struct CommandRunnerView: View {
             // --- Add ScrollViewReader ---
             ScrollViewReader { scrollViewProxy in
                 ScrollView {
-                    // --- Map history entries to a single string --- 
-                    Text(viewModel.history.map { entry in
-                        var entryString = "$ \(entry.command)\n"
-                        entryString += entry.output
-                        if !entry.output.isEmpty && !entry.output.hasSuffix("\n") {
-                             entryString += "\n" // Ensure newline after output
+                    LazyVStack(alignment: .leading, spacing: 8) { // Use LazyVStack for rows
+                        // Add Console Output header
+                        Text("Console Output")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                            .padding(.bottom, 4) // Add some space below the title
+                            .frame(maxWidth: .infinity, alignment: .center) // Center the title
+                        
+                        // Iterate through history entries
+                        ForEach(viewModel.history) { entry in
+                            // Inline the VStack again
+                            VStack(alignment: .leading, spacing: 2) { 
+                                // Display command line
+                                Text("$ \(entry.command)")
+                                    .font(.system(.body, design: .monospaced))
+                                    .fontWeight(.medium) // Slightly bolder for command
+                                    .foregroundColor(.secondary) // Dim the command slightly
+                                
+                                // Display output if not empty
+                                if !entry.output.isEmpty {
+                                    Text(entry.output)
+                                        .font(.system(.body, design: .monospaced))
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                }
+                                
+                                // Display exit code if available
+                                if let exitCode = entry.exitCode {
+                                    Text("Exit Code: \(exitCode)")
+                                        .font(.system(.caption, design: .monospaced))
+                                        .foregroundColor(exitCode == 0 ? .green : .red)
+                                }
+                            }
+                            .padding(.bottom, 8) // Space between entries
+                            .id(entry.id) // Use entry ID for scrolling
                         }
-                        if let exitCode = entry.exitCode {
-                            entryString += "Exit Code: \(exitCode)"
-                        }
-                        return entryString
-                    }.joined(separator: "\n\n")) // Join entries with double newline
-                        .font(.system(.body, design: .monospaced))
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.horizontal)
-                        .padding(.vertical, 8)
-                        .textSelection(.enabled)
-                        .id("logOutput") // --- Add ID ---
+                    }
+                    .padding(.horizontal)
+                    .padding(.vertical, 8)
+                    .textSelection(.enabled)
+                    
                 }
                 .frame(maxHeight: .infinity)
-                // --- Add onChange for scrolling (Use zero-param version for macOS 14+) ---
-                .onChange(of: viewModel.history) { 
+                // --- Revert onChange for scrolling to watch history count --- 
+                .onChange(of: viewModel.history) { // Observe history array changes
                     // Scroll to bottom when history changes
-                    withAnimation {
-                         scrollViewProxy.scrollTo("logOutput", anchor: .bottom)
+                    if let lastEntryId = viewModel.history.last?.id {
+                        withAnimation {
+                            scrollViewProxy.scrollTo(lastEntryId, anchor: .bottom)
+                        }
                     }
                 }
             } // --- End ScrollViewReader ---
@@ -50,7 +78,7 @@ struct CommandRunnerView: View {
             
             // Input and Control Area
             HStack {
-                TextField("Enter command...", text: $viewModel.commandInput)
+                TextField("Enter terminal command...", text: $viewModel.commandInput) // Updated placeholder
                     .textFieldStyle(.plain)
                     .font(.system(.body, design: .monospaced))
                     // --- Use correct FocusState binding --- 

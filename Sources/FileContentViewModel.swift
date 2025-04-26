@@ -214,4 +214,25 @@ class FileContentViewModel: ObservableObject {
         // Fallback or if UTI couldn't be determined
         return false
     }
+
+    // --- New: Method to clear displayed content ---
+    func clearDisplay() {
+        print("Clearing file display.")
+        self.fileURL = nil
+        self.fileContent = ""
+        self.originalContent = ""
+        self.isDirty = false
+        self.isPlainText = true // Reset type assumption
+        self.fileIcon = nil
+        self.errorMessage = nil
+        self.isLoading = false
+        // Stop monitoring if active (as there's no file)
+        // We need to recreate stopMonitoring or handle it here
+        // Let's skip monitor stop for now, loadFile handles it.
+    }
+
+    // --- File Deletion ---
+    func deleteItem(_ item: FileSystemItem) {
+        // ... existing code ...
+    }
 } 

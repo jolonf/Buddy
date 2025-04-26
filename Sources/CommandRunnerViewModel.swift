@@ -2,13 +2,18 @@ import SwiftUI
 import Foundation
 import Combine
 
-// Placeholder struct for command history entries
+// Revert to struct
 struct CommandHistoryEntry: Identifiable, Equatable {
     let id = UUID()
     let command: String
-    var output: String = ""
-    var exitCode: Int32? = nil
-    // Add timestamps, etc. later if needed
+    var output: String = ""       // Regular property
+    var exitCode: Int32? = nil    // Regular property
+    // Initializer can be synthesized or kept explicit if needed
+
+    // Equatable conformance based on ID (can be synthesized if struct is simple)
+    // static func == (lhs: CommandHistoryEntry, rhs: CommandHistoryEntry) -> Bool {
+    //     lhs.id == rhs.id
+    // }
 }
 
 // Result structure for executed commands
@@ -23,8 +28,10 @@ class CommandRunnerViewModel: ObservableObject {
     
     // --- State Properties ---
     @Published var commandInput: String = ""
-    @Published var history: [CommandHistoryEntry] = []
+    @Published var history: [CommandHistoryEntry] = [] // Array of structs
     @Published var isRunning: Bool = false
+    // Remove outputAppendedTrigger
+    // @Published var outputAppendedTrigger: Bool = false 
     
     // --- Command History Navigation ---
     private var executedCommands: [String] = []
@@ -84,11 +91,12 @@ class CommandRunnerViewModel: ObservableObject {
             // --- Termination Handler ---
             task.terminationHandler = { [weak self] process in
                 let exitCode = process.terminationStatus
-                Task { @MainActor [weak self] in // Dispatch back to main actor
+                Task { @MainActor [weak self] in 
                     guard let self = self else { return }
                     print("Process terminated with code: \(exitCode)")
+                    // Find index and update struct by replacing it in the array
                     if let index = self.history.firstIndex(where: { $0.id == entryID }) {
-                        self.history[index].exitCode = exitCode
+                        self.history[index].exitCode = exitCode 
                     }
                     self.isRunning = false
                     self.currentProcess = nil
@@ -104,14 +112,16 @@ class CommandRunnerViewModel: ObservableObject {
             stdoutHandle?.readabilityHandler = { [weak self] handle in
                 let data = handle.availableData
                 if data.isEmpty {
-                    // End of file, stop reading
                     handle.readabilityHandler = nil
-                } else if let output = String(data: data, encoding: .utf8) {
-                    Task { @MainActor [weak self] in // Dispatch back to main actor
+                } else if let outputChunk = String(data: data, encoding: .utf8) {
+                    // <<< Add debug print here >>>
+                    print("DEBUG: stdout received chunk: \(outputChunk.prefix(50).replacingOccurrences(of: "\n", with: "\\n"))[...]")
+                    Task { @MainActor [weak self] in 
                         guard let self = self else { return }
+                        // Find index and append to struct property (will require replacement)
                         if let index = self.history.firstIndex(where: { $0.id == entryID }) {
-                            self.history[index].output.append(output)
-                            // TODO: Add logic to scroll output view?
+                            // Append directly (won't trigger UI update itself, but history modified)
+                            self.history[index].output.append(outputChunk)
                         }
                     }
                 }
@@ -122,11 +132,13 @@ class CommandRunnerViewModel: ObservableObject {
                 if data.isEmpty {
                     handle.readabilityHandler = nil
                 } else if let errorOutput = String(data: data, encoding: .utf8) {
-                     Task { @MainActor [weak self] in // Dispatch back to main actor
+                     // <<< Add debug print here >>>
+                     print("DEBUG: stderr received chunk: \(errorOutput.prefix(50).replacingOccurrences(of: "\n", with: "\\n"))[...]")
+                     Task { @MainActor [weak self] in 
                         guard let self = self else { return }
+                        // Find index and append to struct property (will require replacement)
                          if let index = self.history.firstIndex(where: { $0.id == entryID }) {
-                            self.history[index].output.append("\n[STDERR]:\n" + errorOutput) // Prepend stderr marker
-                            // TODO: Add logic to scroll output view?
+                            self.history[index].output.append("\n[STDERR]:\n" + errorOutput)
                         }
                     }
                 }
@@ -141,6 +153,7 @@ class CommandRunnerViewModel: ObservableObject {
                 Task { @MainActor [weak self] in // Dispatch back to main actor
                     guard let self = self else { return }
                     let errorMessage = "Failed to launch command: \(error.localizedDescription)"
+                    // Find index and update struct by replacing it in the array
                     if let index = self.history.firstIndex(where: { $0.id == entryID }) {
                         self.history[index].output.append(errorMessage)
                         self.history[index].exitCode = -1 // Indicate launch failure
@@ -214,18 +227,19 @@ class CommandRunnerViewModel: ObservableObject {
 
     // TODO: Add helpers for appending output, handling termination
 
-    // --- New Helper for Agent Commands ---
+    // --- New Helper for Agent Commands (Struct) ---
     @MainActor
     func addCompletedAgentCommandToHistory(command: String, result: CommandResult) {
-        // Combine stdout and stderr for display, similar to how runCommand handles stderr
+        // Combine stdout and stderr
         var combinedOutput = result.stdout
         if !result.stderr.isEmpty {
             combinedOutput += "\n[STDERR]:\n" + result.stderr
         }
         
+        // Create the entry STRUCT
         let entry = CommandHistoryEntry(
             command: command, 
-            output: combinedOutput.trimmingCharacters(in: .whitespacesAndNewlines), // Trim output
+            output: combinedOutput.trimmingCharacters(in: .whitespacesAndNewlines),
             exitCode: result.exitCode
         )
         history.append(entry)
@@ -243,7 +257,7 @@ class CommandRunnerViewModel: ObservableObject {
 
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/bin/zsh") // Use zsh
-        process.arguments = ["-c", command] // Execute command string
+        process.arguments = ["-c", command] // Execute original command string directly
         process.currentDirectoryURL = workingDirectory
 
         let outputPipe = Pipe()
