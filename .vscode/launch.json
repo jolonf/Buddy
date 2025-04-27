@@ -4,18 +4,18 @@
             "type": "swift",
             "request": "launch",
             "args": [],
-            "cwd": "${workspaceFolder:Buddy.swiftpm}",
+            "cwd": "${workspaceFolder:Buddy}",
             "name": "Debug Buddy",
-            "program": "${workspaceFolder:Buddy.swiftpm}/.build/debug/Buddy",
+            "program": "${workspaceFolder:Buddy}/.build/debug/Buddy",
             "preLaunchTask": "swift: Build Debug Buddy"
         },
         {
             "type": "swift",
             "request": "launch",
             "args": [],
-            "cwd": "${workspaceFolder:Buddy.swiftpm}",
+            "cwd": "${workspaceFolder:Buddy}",
             "name": "Release Buddy",
-            "program": "${workspaceFolder:Buddy.swiftpm}/.build/release/Buddy",
+            "program": "${workspaceFolder:Buddy}/.build/release/Buddy",
             "preLaunchTask": "swift: Build Release Buddy"
         }
     ]

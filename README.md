@@ -1,8 +1,8 @@
-# Buddy - LLM Coding Experiment
+# Buddy
 
 ## Overview
 
-Buddy is a macOS/iOS SwiftUI application developed as an experiment in AI-assisted coding and exploring the capabilities of Large Language Models (LLMs) in a development context.
+Buddy is a macOS/iOS SwiftUI application developed as an experiment in AI coding and exploring the capabilities of Large Language Models (LLMs) in a development context.
 
 **Disclaimer:** This project is purely experimental and intended for learning and exploration purposes. It is **not** a polished product, is likely unstable, and is not suitable for production use.
 
