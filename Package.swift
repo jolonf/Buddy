@@ -22,7 +22,7 @@ let package = Package(
             name: "Buddy",
             path: ".",
             // Exclude common directories from the build target
-            exclude: ["docs", ".git", ".gitignore", ".build", ".vscode", ".swiftpm"],
+            exclude: ["docs", ".git", ".gitignore", ".build", ".vscode", ".swiftpm", "README.md"],
             sources: ["Sources"], // Explicitly specify source directory
             resources: [ // Add this resources block
                 .copy("Resources")
