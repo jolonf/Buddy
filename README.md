@@ -16,7 +16,7 @@ The primary goal of Buddy is to serve as a testbed for integrating LLMs (specifi
 *   Executing shell commands within a project context.
 *   Enabling the LLM to perform file system actions (read, list, edit) in an "Agent" mode.
 
-## Features (Based on Development Phases)
+## Features
 
 1.  **Chat Interface:** Connects to a local LM Studio instance (`http://localhost:1234` by default) and provides a chat interface to interact with loaded models via the OpenAI-compatible API. Supports streaming responses.
 2.  **Folder View:** A sidebar allows selecting a local project folder (using security-scoped bookmarks for persistent access) and browsing its contents in a hierarchical view.
