@@ -4,6 +4,8 @@
 
 Buddy is a macOS SwiftUI application developed as an experiment in AI coding with local LLMs connecting to LM Studio.
 
+![Buddy App Screenshot](./docs/images/screenshot.png)
+
 **Disclaimer:** This project is purely experimental and intended for learning and exploration purposes. It is **not** a polished product, is likely unstable, and is not suitable for production use.
 
 ## Purpose
