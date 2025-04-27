@@ -50,6 +50,13 @@ struct ChatView: View {
                             ChatMessageRow(message: message)
                                 .id(message.id) // ID for scrolling
                         }
+                        
+                        // --- Typing Indicator (moved inside LazyVStack) ---
+                        if viewModel.isAwaitingFirstToken {
+                            TypingIndicatorView()
+                                .id("typingIndicator") // Add ID for potential scrolling target
+                                .transition(.opacity) // Fade in/out
+                        }
                     }
                     .padding(.horizontal)
                     .padding(.top)
@@ -61,6 +68,17 @@ struct ChatView: View {
                             }
                         }
                     }
+                    // --- ADD: Scroll when typing indicator appears ---
+                    .onChange(of: viewModel.isAwaitingFirstToken) { _, isAwaiting in
+                        if isAwaiting {
+                            // Scroll to the indicator when it appears
+                            withAnimation {
+                                proxy.scrollTo("typingIndicator", anchor: .bottom)
+                            }
+                        }
+                        // No need to scroll when it disappears, the message scroll will handle it
+                    }
+                    // -----------------------------------------------
                 }
             }
             .id("MessageListBottom") // For scrolling
@@ -137,6 +155,65 @@ struct ChatView: View {
             }
         }
     }
+}
+
+// MARK: - Typing Indicator View
+
+private struct TypingIndicatorView: View {
+    // @State private var animationPhase: Double = 0.0
+    private let dotCount = 3
+    // private let animationDuration = 0.9
+    @State private var isAnimating = false // State to trigger animation
+
+    var body: some View {
+        HStack(spacing: 5) { // Increased spacing slightly
+            ForEach(0..<dotCount, id: \.self) { index in
+                Circle()
+                    .frame(width: 7, height: 7)
+                    // .foregroundColor(.secondary.opacity(calculateOpacity(index: index)))
+                    .foregroundColor(.secondary)
+                    .scaleEffect(isAnimating ? 1.0 : 0.5) // Animate scale
+                    .animation(
+                        .easeInOut(duration: 0.4) // Faster pulse
+                        .repeatForever(autoreverses: true)
+                        .delay(0.1 * Double(index)), // Stagger animation start
+                        value: isAnimating
+                    )
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading) // Align left like assistant message
+        .padding(.horizontal) // Match message padding
+        .padding(.vertical, 8)
+        .onAppear {
+            isAnimating = true // Start animation on appear
+            // Simple repeating animation using phase
+            // // Schedule animation slightly differently to avoid immediate jump
+            // DispatchQueue.main.asyncAfter(deadline: .now() + 0.01) { 
+            //      withAnimation(.easeInOut(duration: animationDuration).repeatForever(autoreverses: true)) {
+            //          animationPhase = 1.0
+            //      }
+            // }
+        }
+        // No need for onDisappear reset with this animation approach
+        // .onDisappear {
+        //      // Reset animation phase if needed, though it might not be strictly necessary
+        //      animationPhase = 0.0 
+        // }
+    }
+
+    // Calculate opacity based on index and overall animation phase
+    // private func calculateOpacity(index: Int) -> Double {
+    //     // Create a phase offset for each dot so they don't animate identically
+    //     let phaseShift = Double(index) / Double(dotCount)
+    //     // Calculate the current phase for this specific dot (0.0 to 1.0)
+    //     let dotPhase = (animationPhase + phaseShift).truncatingRemainder(dividingBy: 1.0)
+    //     // Use a curve (e.g., parabola) to make opacity fade in/out smoothly
+    //     // Center the peak opacity at phase 0.5
+    //     let centeredPhase = abs(dotPhase - 0.5) * 2 // Maps 0->0.5->1 to 1->0->1
+    //     let opacity = 1.0 - centeredPhase // Invert: 0->1->0
+    //     // Add a minimum opacity so dots don't disappear completely
+    //     return 0.3 + (0.7 * opacity)
+    // }
 }
 
 #Preview {

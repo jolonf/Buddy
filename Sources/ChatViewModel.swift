@@ -64,6 +64,7 @@ class ChatViewModel: ObservableObject {
     @AppStorage("interactionMode") var interactionMode: InteractionMode = .ask // Default to .ask if not set
     // Trigger for auto-scrolling chat on content updates
     @Published var scrollTrigger: UUID = UUID()
+    @Published var isAwaitingFirstToken: Bool = false // <<< ADD STATE
 
     // Computed property for Agent Mode Toggle binding
     var isAgentModeBinding: Binding<Bool> {
@@ -226,11 +227,15 @@ class ChatViewModel: ObservableObject {
         } catch {
             connectionError = "Failed to encode request: \(error.localizedDescription)"
             isSendingMessage = false
+            isAwaitingFirstToken = false // <<< RESET FLAG ON ENCODE ERROR
             // Remove the optimistic user message if encoding fails?
             messages.removeLast()
             return
         }
 
+        // Set awaiting flag before starting task
+        isAwaitingFirstToken = true // <<< SET TRUE
+        
         // Start the streaming task, passing the start time
         apiTask = Task {
             await performStreamingRequest(request: request, requestStartTime: requestStartTime)
@@ -245,7 +250,11 @@ class ChatViewModel: ObservableObject {
         
         defer {
             // Ensure sending state is reset even if task is cancelled
-            isSendingMessage = false
+            // Dispatch back to main actor for state updates
+            Task { @MainActor [weak self] in
+                self?.isSendingMessage = false
+                self?.isAwaitingFirstToken = false // <<< RESET IN DEFER
+            }
             apiTask = nil
         }
 
@@ -254,7 +263,10 @@ class ChatViewModel: ObservableObject {
 
             guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
                 let statusCode = (response as? HTTPURLResponse)?.statusCode ?? -1
-                connectionError = "Chat request failed. Status code: \(statusCode)"
+                Task { @MainActor [weak self] in // Dispatch to main actor
+                    self?.connectionError = "Chat request failed. Status code: \(statusCode)"
+                    self?.isAwaitingFirstToken = false // <<< RESET ON EARLY FAILURE
+                }
                 return
             }
 
@@ -290,6 +302,10 @@ class ChatViewModel: ObservableObject {
                             
                             // Add/update the message in the main array
                             if messageIndex == nil {
+                                // First token received for this message
+                                Task { @MainActor [weak self] in
+                                     self?.isAwaitingFirstToken = false // <<< RESET ON FIRST TOKEN
+                                }
                                 assistantResponseMessage.tokenCount = tokenCount // <<< Set initial token count
                                 messages.append(assistantResponseMessage)
                                 messageIndex = messages.count - 1
@@ -305,7 +321,12 @@ class ChatViewModel: ObservableObject {
                         }
                     } catch {
                         print("Failed to decode stream chunk: \(error), Line: \(line)")
-                        connectionError = "Error decoding stream chunk: \(error.localizedDescription)"
+                        // Still reset awaiting flag if decoding fails mid-stream?
+                        // Let defer handle it, as we might still be "sending"
+                        Task { @MainActor [weak self] in
+                            self?.connectionError = "Error decoding stream chunk: \(error.localizedDescription)"
+                            // Optionally reset isAwaitingFirstToken here too, but defer covers task end.
+                        }
                     }
                 }
             }
@@ -340,7 +361,11 @@ class ChatViewModel: ObservableObject {
 
         } catch {
             if !Task.isCancelled {
-                 connectionError = "Network error during chat: \(error.localizedDescription)"
+                 // Dispatch error setting and flag reset to main actor
+                 Task { @MainActor [weak self] in
+                     self?.connectionError = "Network error during chat: \(error.localizedDescription)"
+                     self?.isAwaitingFirstToken = false // <<< RESET ON CATCH
+                 }
              }
         }
     }
@@ -396,12 +421,14 @@ class ChatViewModel: ObservableObject {
         } catch {
             connectionError = "Failed to encode action result request: \(error.localizedDescription)"
             isSendingMessage = false // Reset if encoding fails
+            isAwaitingFirstToken = false // <<< RESET FLAG ON ENCODE ERROR
             return
         }
 
         // Reuse the streaming request logic
         print("Calling performStreamingRequest for action result feedback...")
         let requestStartTime = Date() // Define start time for this request phase
+        isAwaitingFirstToken = true // <<< SET TRUE before awaiting next response
         await performStreamingRequest(request: request, requestStartTime: requestStartTime)
         // isSendingMessage will be reset by performStreamingRequest's defer block
     }
