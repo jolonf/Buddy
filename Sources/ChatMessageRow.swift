@@ -180,4 +180,37 @@ struct ChatMessageRow: View {
             return "Performing action `\(action.name)`..."
         }
     }
+}
+
+#Preview {
+    // --- Sample Messages for Preview --- 
+    let userMsg = ChatMessage(role: .user, content: "Hello there!")
+    let assistantMsg = ChatMessage(role: .assistant, content: "Hi! How can I help?", ttft: 0.123, tps: 55.6)
+    let systemMsg = ChatMessage(role: .system, content: "System prompt loaded.")
+    let readFileActionMsg = ChatMessage(role: .assistant, content: "Okay, I will read the file.\nACTION: READ_FILE(path='Sources/Test.swift')")
+    let listDirActionMsg = ChatMessage(role: .assistant, content: "ACTION: LIST_DIR(path='.')")
+    let editFileActionMsg = ChatMessage(
+        role: .assistant, 
+        content: "I will edit the file.\nACTION: EDIT_FILE(path='README.md')\nCONTENT_START\n# Updated Readme\nNew content here.\nCONTENT_END\nThis is the final response."
+    )
+    let editFileNoPrecedingText = ChatMessage(
+        role: .assistant, 
+        content: "ACTION: EDIT_FILE(path='Sources/Another.swift')\nCONTENT_START\nfunc newFunc() { }\nCONTENT_END"
+    )
+    let runCommandActionMsg = ChatMessage(role: .assistant, content: "ACTION: RUN_COMMAND(command='swift build')")
+    
+    // --- Preview Layout --- 
+    return ScrollView { // Use ScrollView to see multiple messages
+        VStack(alignment: .leading) {
+            ChatMessageRow(message: userMsg)
+            ChatMessageRow(message: assistantMsg)
+            ChatMessageRow(message: systemMsg)
+            ChatMessageRow(message: readFileActionMsg)
+            ChatMessageRow(message: listDirActionMsg)
+            ChatMessageRow(message: editFileActionMsg)
+            ChatMessageRow(message: editFileNoPrecedingText)
+            ChatMessageRow(message: runCommandActionMsg)
+        }
+        .padding()
+    }
 } 

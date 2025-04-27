@@ -1,5 +1,7 @@
 ## Functional Specification: Buddy - Phase 2: Folder View (Version 2.0)
 
+**Note:** This document describes the scope for Phase 2. Features like command running and agent actions were added later and are detailed in subsequent specification documents.
+
 **1. Introduction**
 
 This document outlines the functional requirements for Phase 2 of the Buddy application. Building upon the basic chat functionality established in Phase 1, this phase focuses on adding a persistent, lazy-loading file system browser panel, similar to the Explorer view in VS Code or the Project Navigator in Xcode. This panel will allow users to select and view the structure of a local project folder.
@@ -20,23 +22,23 @@ This document outlines the functional requirements for Phase 2 of the Buddy appl
     *   **Sidebar:** Hosts the new `FolderView`.
     *   **Content:** Hosts the existing chat interface (likely the current `ContentView` structure, possibly renamed or refactored).
 *   **Folder View (New: `FolderView.swift`):**
-    *   **Initial State:** When no folder is selected (e.g., first launch, or persisted bookmark fails), the sidebar should display a prominent, centered "Select Project Folder" button.
+    *   **Initial State:** When no folder is selected (e.g., first launch, or persisted bookmark fails), the sidebar displays a standard placeholder view (e.g., using `ContentUnavailableView`) indicating no folder is selected and offering a button to select one.
     *   **Active State:** Once a folder is successfully selected and accessed, the sidebar displays a hierarchical tree view of its contents.
         *   **Tree Items:** Each item represents a file or folder.
-        *   **Expansion:** Folders are expandable/collapsible (e.g., using `DisclosureGroup`).
+        *   **Expansion:** Folders are expandable/collapsible (e.g., using `List` with a `children` key path).
         *   **Icons:** Standard SF Symbols will be used initially (e.g., `folder` for directories, `doc` for files).
         *   **Sorting:** Within each directory level, items are sorted alphabetically, with folders listed before files.
-        *   **Selection:** Selecting an item in the tree has no effect in Phase 2.
+        *   **Selection:** Selecting an item in the tree updates a published `@Published var selectedItem: FileSystemItem?` property in the `FolderViewModel`. This allows other views (like a file content view) to observe and react to the selection.
 *   **"Select Project Folder" Button:**
-    *   Located within the `FolderView` (visible when no folder is active).
+    *   Located within the `FolderView` (visible as part of the initial/empty state view).
     *   Triggers a system file open panel configured to select directories only.
 
 **4. Core Functionality**
 
 *   **Folder Selection:**
-    *   Utilize `NSOpenPanel` (on macOS) to allow the user to choose a directory.
+    *   Utilize SwiftUI's `.fileImporter` modifier to allow the user to choose a directory.
 *   **Persistence:**
-    *   Upon successful folder selection via `NSOpenPanel`, generate security-scoped bookmark data from the chosen folder's URL.
+    *   Upon successful folder selection via `.fileImporter`, generate security-scoped bookmark data from the chosen folder's URL.
     *   Store this bookmark `Data` persistently using `@AppStorage` (e.g., key: `"selectedFolderBookmarkData"`).
     *   On application launch, attempt to retrieve the bookmark `Data` from `@AppStorage`.
     *   If `Data` exists, attempt to resolve it back to a URL using `URL(resolvingBookmarkData:options:relativeTo:bookmarkDataIsStale:)`. Handle potential errors and stale bookmarks (e.g., by clearing the stored data and showing the "Select Folder" button).
@@ -61,10 +63,10 @@ This document outlines the functional requirements for Phase 2 of the Buddy appl
 
 **6. Future Considerations (Out of Scope for Phase 2)**
 
-*   Displaying file content in a detail view when a file is selected.
-*   Implementing file operations (create, delete, rename) via context menus or buttons.
+*   ~~Displaying file content in a detail view when a file is selected.~~ (Implemented)
+*   Implementing file operations (create, rename) via context menus or buttons. (Delete implemented).
 *   Adding a search/filter bar to the folder view.
 *   Supporting multiple project roots or workspaces.
-*   Displaying actual file icons (using `NSWorkspace` on macOS) instead of generic SF Symbols.
+*   ~~Displaying actual file icons (using `NSWorkspace` on macOS) instead of generic SF Symbols.~~ (Basic support implemented for non-text files).
 *   Manual refresh button for the folder view.
-*   Handling changes to the file system made outside the application while it's running. 
+*   ~~Handling changes to the file system made outside the application while it's running.~~ (Implemented via `DispatchSource` monitoring).

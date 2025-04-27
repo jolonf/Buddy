@@ -62,15 +62,11 @@ struct BuddyApp: App {
             // Use NavigationSplitView for Sidebar + Content + Detail layout
             NavigationSplitView {
                 FolderView()
-                    // Optional: Set sidebar width constraints if needed
-                    // .navigationSplitViewColumnWidth(min: 180, ideal: 200, max: 400)
             } content: {
                 // Use VSplitView for File Content and Command Runner
                 VSplitView {
                     FileContentView()
                     CommandRunnerView()
-                        // Optional: Set a default min height for the command runner
-                        // .frame(minHeight: 150) 
                 }
             } detail: {
                 ChatView()

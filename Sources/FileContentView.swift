@@ -8,19 +8,6 @@ struct FileContentView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // --- Header/Toolbar Area (Placeholder) ---
-            // HStack {
-            //     // Display filename and dirty indicator (*)
-            //     Text("\(viewModel.fileURL?.lastPathComponent ?? "No File Selected")\(viewModel.isDirty ? " ●" : "")")
-            //         .font(.headline)
-            //         .padding(.leading)
-            //     Spacer()
-            //     // Potentially add Save button here later?
-            // }
-            // .frame(height: 30) // Example height
-            // .background(.bar) // Use a bar background material
-            // .padding(.bottom, 1) // Small separation
-
             // --- Content Area ---
             Group { // Group allows applying modifiers conditionally later
                 if viewModel.isLoading {
@@ -103,8 +90,16 @@ struct FileContentView: View {
 
 // Placeholder Preview
 #Preview {
-    // Need to provide FolderViewModel in environment for preview
+    // Instantiate required ViewModels
+    let folderVM = FolderViewModel()
+    let contentVM = FileContentViewModel()
+    // Optional: Set state on contentVM for different previews
+    // contentVM.fileURL = URL(fileURLWithPath: "/dummy/file.txt")
+    // contentVM.fileContent = "Sample file content\nAnother line."
+    // contentVM.isPlainText = true
+    
     FileContentView()
-        .environmentObject(FolderViewModel()) // Provide a dummy FolderViewModel
+        .environmentObject(folderVM) // Provide FolderViewModel
+        .environmentObject(contentVM) // Provide FileContentViewModel
         .frame(width: 400, height: 500)
 } 

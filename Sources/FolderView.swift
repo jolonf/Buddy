@@ -97,4 +97,18 @@ struct FolderView: View {
     }
 }
 
+#Preview {
+    let dummyFolderVM = FolderViewModel()
+    // Optional: Populate dummyFolderVM with sample data for preview states
+    // dummyFolderVM.rootFileSystemItems = [
+    //     FileSystemItem(name: "Folder 1", url: URL(fileURLWithPath: "/dummy/folder1"), isDirectory: true, children: nil),
+    //     FileSystemItem(name: "File 1.txt", url: URL(fileURLWithPath: "/dummy/file1.txt"), isDirectory: false, children: nil)
+    // ]
+    // dummyFolderVM.selectedFolderURL = URL(fileURLWithPath: "/dummy")
+    
+    return FolderView()
+        .environmentObject(dummyFolderVM)
+        .frame(width: 250) // Give it a reasonable width for preview
+}
+
  

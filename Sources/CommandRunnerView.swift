@@ -85,17 +85,7 @@ struct CommandRunnerView: View {
                     .focused($textFieldIsFocused)
                     .onSubmit {
                         // Run command on submit if not already running
-                        if !viewModel.isRunning {
-                            // Get current folder URL and pass it
-                            if let url = folderViewModel.selectedFolderURL {
-                                 viewModel.runCommand(workingDirectory: url)
-                                 // --- Set focus back ---
-                                 textFieldIsFocused = true
-                            } else {
-                                // Handle case where no folder is selected (e.g., show alert?)
-                                print("Cannot run command: No folder selected.")
-                            }
-                        }
+                        submitCommand()
                     }
                     // Add .onKeyPress here
                     .onKeyPress(keys: [.upArrow, .downArrow], action: { keyPress in
@@ -117,15 +107,7 @@ struct CommandRunnerView: View {
                     }
                 } else {
                     Button("Run") {
-                        // Get current folder URL and pass it
-                        if let url = folderViewModel.selectedFolderURL {
-                             viewModel.runCommand(workingDirectory: url)
-                             // --- Set focus back ---
-                             textFieldIsFocused = true
-                        } else {
-                            // Handle case where no folder is selected (e.g., show alert?)
-                            print("Cannot run command: No folder selected.")
-                        }
+                        submitCommand()
                     }
                     .disabled(viewModel.commandInput.isEmpty || folderViewModel.selectedFolderURL == nil)
                     .keyboardShortcut(.defaultAction)
@@ -143,12 +125,30 @@ struct CommandRunnerView: View {
             }
             .padding()
         }
-         // Optional: Add min height if needed
-        // .frame(minHeight: 150) 
+        // .frame(minHeight: 150) // REMOVE_LINE
         // --- Add onAppear to set initial focus ---
         .onAppear {
             textFieldIsFocused = true
         }
+    }
+    
+    // --- Helper function to avoid duplicating run logic ---
+    private func submitCommand() {
+        // Check if already running first
+        guard !viewModel.isRunning else { 
+            print("Command already running, submit ignored.")
+            return
+        }
+        // Get current folder URL
+        guard let url = folderViewModel.selectedFolderURL else {
+            print("Cannot run command: No folder selected.")
+            // TODO: Maybe show an alert to the user?
+            return
+        }
+        // Run command via ViewModel
+        viewModel.runCommand(workingDirectory: url)
+        // --- Set focus back ---
+        textFieldIsFocused = true 
     }
 }
 

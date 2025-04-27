@@ -167,7 +167,7 @@ class CommandRunnerViewModel: ObservableObject {
     }
     
     func stopCommand() {
-        // TODO: Implement process termination
+        // Obsolete TODO removed
         print("Placeholder: Stop current command")
         guard let process = currentProcess else {
             print("No process is currently running.")
@@ -179,7 +179,7 @@ class CommandRunnerViewModel: ObservableObject {
     }
     
     func clearLog() {
-        // TODO: Implement log clearing
+        // Obsolete TODO removed
         print("Placeholder: Clear command log")
         history = []
         historyNavigationIndex = nil // Reset history navigation

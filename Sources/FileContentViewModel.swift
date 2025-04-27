@@ -226,13 +226,5 @@ class FileContentViewModel: ObservableObject {
         self.fileIcon = nil
         self.errorMessage = nil
         self.isLoading = false
-        // Stop monitoring if active (as there's no file)
-        // We need to recreate stopMonitoring or handle it here
-        // Let's skip monitor stop for now, loadFile handles it.
-    }
-
-    // --- File Deletion ---
-    func deleteItem(_ item: FileSystemItem) {
-        // ... existing code ...
     }
 } 

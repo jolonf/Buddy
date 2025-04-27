@@ -1,5 +1,7 @@
 ## Functional Specification: LLM Coding Agent Explorer (Version 1.0)
 
+**Note:** This document describes the *initial* V1.0 scope. Features like folder interaction, file editing, command running, and agent actions were added later and are detailed in subsequent specification documents (V2.0 - V5.0).
+
 **1. Introduction**
 
 This document outlines the functional requirements for the initial version (V1.0) of the LLM Coding Agent Explorer application. The goal of this version is to provide a basic chat interface for interacting with Large Language Models (LLMs) hosted locally via LM Studio, running on macOS.
@@ -21,9 +23,9 @@ This document outlines the functional requirements for the initial version (V1.0
 **4.1. LM Studio Connection**
 
 *   **Server Address Configuration:**
-    *   The application shall provide a mechanism (e.g., a settings view or a text field within the main interface) for the user to specify the base URL of the LM Studio server.
-    *   The default value shall be pre-filled as `http://localhost:1234`.
-    *   The application shall append `/v1` to the user-provided base URL for API calls (e.g., `http://localhost:1234/v1`).
+    *   The application currently uses a fixed server address for the LM Studio server.
+    *   The default value is hardcoded as `http://localhost:1234`.
+    *   API paths (e.g., `/v1/models`, `/v1/chat/completions`) are appended directly to this fixed base URL.
 *   **Connection Status & Model Loading:**
     *   Upon launch, and whenever the server address is changed, the application shall attempt to connect to the LM Studio server by making a `GET` request to the `/v1/models` endpoint.
     *   **Success:** If the connection is successful and models are returned:
@@ -55,7 +57,7 @@ This document outlines the functional requirements for the initial version (V1.0
         *   The application should aim to render basic Markdown formatting (e.g., bold, italics, code blocks ` ``` `) if SwiftUI makes this reasonably straightforward. If complex, plain text rendering is acceptable for V1.
     *   The application needs to correctly parse the SSE stream to extract the message content (typically within `delta.content`).
 *   **Error Handling (Chat):**
-    *   If an error occurs during the chat request/response (e.g., API error from LM Studio, network issue mid-stream), an informative error message shall be displayed inline within the chat view (e.g., replacing or appending to the LLM's incomplete response bubble).
+    *   If an error occurs during the chat request/response (e.g., API error from LM Studio, network issue mid-stream), an informative error message shall be displayed in a dedicated status area above the chat history.
 *   **Persistence:** The chat history shall *not* persist between application launches in V1.0. Clearing the chat or restarting the app will result in an empty chat view.
 
 **5. Non-Functional Requirements**
@@ -64,6 +66,8 @@ This document outlines the functional requirements for the initial version (V1.0
 *   **Performance:** The app should remain responsive during streaming LLM responses. UI updates should be efficient.
 *   **Technology:** SwiftUI, targeting macOS.
 
+*   Technology: SwiftUI, targeting macOS.
+
 **6. Future Considerations (Out of Scope for V1.0)**
 
 *   Chat history persistence (local storage, Core Data, CloudKit).
@@ -71,7 +75,7 @@ This document outlines the functional requirements for the initial version (V1.0
 *   Bonjour discovery for LM Studio server.
 *   More advanced Markdown rendering.
 *   Support for parameters like temperature, max tokens, etc.
-*   System prompt configuration.
+*   ~~System prompt configuration.~~ (Basic file-based system prompt loading implemented).
 *   Multi-chat session management.
 *   Integration with other LLM hosting services (Ollama, Cloud APIs).
-*   Features specific to coding agent exploration (e.g., file context, tool use simulation). 
+*   ~~Features specific to coding agent exploration (e.g., file context, tool use simulation).~~ (Covered in later specs V2.0-V5.0). 

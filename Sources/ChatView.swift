@@ -66,12 +66,7 @@ struct ChatView: View {
             .id("MessageListBottom") // For scrolling
 
             // --- Agent Mode Toggle --- 
-            Toggle("Agent Mode", isOn: Binding(
-                get: { viewModel.interactionMode == .agent },
-                set: { isOn in
-                    viewModel.interactionMode = isOn ? .agent : .ask
-                }
-            ))
+            Toggle("Agent Mode", isOn: viewModel.isAgentModeBinding)
             .toggleStyle(.checkbox) // Use checkbox style on macOS
             .padding(.horizontal)
             .padding(.top, 8) // Add top padding
@@ -147,9 +142,12 @@ struct ChatView: View {
 #Preview {
     // Create dummy view models for the preview
     let folderVM = FolderViewModel()
-    // let chatVM = ChatViewModel(folderViewModel: folderVM) // No longer needed here
+    let commandRunnerVM = CommandRunnerViewModel() // Create dummy command runner
+    let chatVM = ChatViewModel(folderViewModel: folderVM, commandRunnerViewModel: commandRunnerVM) // Pass dependencies
     
     return ChatView()
-        // Provide both view models to the environment for the preview
+        // Provide ALL required view models to the environment for the preview
         .environmentObject(folderVM)
+        .environmentObject(chatVM) // <<< Add ChatViewModel injection
+        .environmentObject(commandRunnerVM) // <<< Add CommandRunnerViewModel injection (if needed by subviews)
 } 

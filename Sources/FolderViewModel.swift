@@ -26,10 +26,6 @@ class FolderViewModel: ObservableObject {
     var urlToSelectAfterRefresh: URL? = nil // Store URL to select after monitor refreshes list (internal access)
     
     init() {
-        // TODO: Load persisted bookmark on init
-        // TODO: Resolve URL from bookmark
-        // TODO: Start security scope access
-        // TODO: Load initial folder contents
         resolveBookmarkAndStartAccess() 
     }
     
@@ -214,9 +210,6 @@ class FolderViewModel: ObservableObject {
             return
         }
         
-        if item.children != nil {
-        }
-
         guard item.url.startAccessingSecurityScopedResource() else {
             return
         }
@@ -271,7 +264,10 @@ class FolderViewModel: ObservableObject {
         }
 
         if findAndUpdate(items: &rootFileSystemItems) {
+            // Item found and updated (do nothing extra)
         } else {
+            // Item not found (shouldn't happen if called correctly)
+            // print("Warning: Could not find item with ID \(itemId) to update children.") // Example logging
         }
     }
 
