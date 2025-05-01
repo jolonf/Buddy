@@ -18,6 +18,8 @@ struct ChatCompletionRequest: Encodable {
     let model: String
     let messages: [ChatMessage] // Use existing ChatMessage struct
     let stream: Bool = true // Always stream for this app
+    // Add stream_options to request usage data
+    let stream_options: [String: Bool]? = ["include_usage": true] // <<< ADD THIS
     // Add other parameters like temperature, max_tokens if needed later
 }
 
@@ -36,6 +38,14 @@ struct StreamChunk: Decodable {
     let created: Int // Timestamp
     let model: String // Model used
     let choices: [Choice]
+    let usage: Usage? // <<< RE-ADD THIS
+
+    // Define the nested Usage struct
+    struct Usage: Decodable { // <<< RE-ADD THIS STRUCT
+        let prompt_tokens: Int
+        let completion_tokens: Int
+        let total_tokens: Int
+    }
 }
 
 // Define Interaction Mode
@@ -75,7 +85,7 @@ class ChatViewModel: ObservableObject {
     }
 
     // --- LM Studio Connection State ---
-    @Published var serverURL: String = "http://localhost:1234" // Default, can be configured later
+    @Published var serverURL: String = "http://localhost:1234" // Ollama default URL
     @Published var availableModels: [ModelInfo] = []
     @Published var selectedModelId: String? = nil
     @Published var isLoadingModels: Bool = false
@@ -110,7 +120,7 @@ class ChatViewModel: ObservableObject {
         connectionError = nil
         availableModels = [] // Clear previous models
 
-        // Construct the full URL
+        // Construct the full URL for Ollama's OpenAI-compatible endpoint
         guard let url = URL(string: serverURL + "/v1/models") else {
             connectionError = "Invalid server URL."
             isLoadingModels = false
@@ -120,7 +130,7 @@ class ChatViewModel: ObservableObject {
         do {
             // Perform the network request
             let (data, response) = try await URLSession.shared.data(from: url)
-
+            print("DEBUG: fetchModels() data: \(data)")
             // Check HTTP status code
             guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
                 let statusCode = (response as? HTTPURLResponse)?.statusCode ?? -1
@@ -210,6 +220,7 @@ class ChatViewModel: ObservableObject {
 
         // Prepare request using the messagesForAPI list
         let requestBody = ChatCompletionRequest(model: modelId, messages: messagesForAPI)
+        // Use Ollama's OpenAI-compatible chat completions endpoint
         guard let url = URL(string: serverURL + "/v1/chat/completions") else {
             connectionError = "Invalid chat completions URL."
             isSendingMessage = false
@@ -278,11 +289,13 @@ class ChatViewModel: ObservableObject {
                     
                     do {
                         let chunk = try JSONDecoder().decode(StreamChunk.self, from: data)
+
+                        // 1. Process content delta (if any)
                         if let deltaContent = chunk.choices.first?.delta.content, !deltaContent.isEmpty {
                             print("DEBUG Token: \(deltaContent)") // <<< ADD THIS LINE
                             // Check if deltaContent is not empty before counting as a token
                             
-                            // --- Stat Calculation --- 
+                            // --- Stat Calculation ---
                             if firstTokenTime == nil {
                                 firstTokenTime = Date() // Record time of first token
                                 // Calculate Time To First Token (TTFT)
@@ -295,7 +308,7 @@ class ChatViewModel: ObservableObject {
                                 }
                             }
                             // Assuming each non-empty chunk is approx. 1 token
-                            tokenCount += 1 
+                            tokenCount += 1
                             // --- End Stat Calculation ---
                             
                             assistantResponseMessage.content += deltaContent
@@ -314,23 +327,39 @@ class ChatViewModel: ObservableObject {
                                 messages[messageIndex!].tokenCount = tokenCount // <<< Update token count
                             }
                             // Update scroll trigger whenever content changes
-                            self.scrollTrigger = UUID() 
+                            self.scrollTrigger = UUID()
                         }
-                        if chunk.choices.first?.finish_reason != nil {
-                            break // End loop gracefully
+
+                        // 2. Check ANY chunk for usage data (will likely be in the last one)
+                        if let usage = chunk.usage, let index = messageIndex {
+                            print("DEBUG: Usage data found: \(usage)")
+                            print("DEBUG: Prompt tokens: \(usage.prompt_tokens)")
+                            // Update the message with the token counts
+                            messages[index].promptTokenCount = usage.prompt_tokens
+                            // Update total token count as well, might be useful later
+                            messages[index].tokenCount = usage.completion_tokens
                         }
+
+                        // 3. Check for finish reason (but DO NOT break the loop)
+                        if let finishReason = chunk.choices.first?.finish_reason {
+                            print("DEBUG: Finish reason received: \(finishReason). Continuing to check for final usage chunk.")
+                            // Do not break here, wait for stream to end naturally
+                        }
+                        
                     } catch {
                         print("Failed to decode stream chunk: \(error), Line: \(line)")
-                        // Still reset awaiting flag if decoding fails mid-stream?
-                        // Let defer handle it, as we might still be "sending"
+                        // Consider how to handle partial message on decode error
+                        // Let defer handle isSendingMessage = false
                         Task { @MainActor [weak self] in
                             self?.connectionError = "Error decoding stream chunk: \(error.localizedDescription)"
-                            // Optionally reset isAwaitingFirstToken here too, but defer covers task end.
                         }
+                        // Maybe break here if decoding fails? Or try to continue?
+                        // For now, let's let the loop attempt to continue if possible.
                     }
                 }
-            }
-            
+            } // End of for try await line loop - stream closed by server
+            print("DEBUG: Stream processing finished.")
+
             // --- Final Stats Calculation (after loop) ---
             if let index = messageIndex {
                 let finishTime = Date()
@@ -389,23 +418,26 @@ class ChatViewModel: ObservableObject {
         var messagesForAPI: [ChatMessage] = []
         let systemPrompt = loadSystemPrompt() // Use current mode's prompt
         messagesForAPI.append(ChatMessage(role: .system, content: systemPrompt))
-        
+
         // Append history UP TO and INCLUDING the message that requested the action
         if historyUpToMessageIndex >= 0 && historyUpToMessageIndex < messages.count {
              // Include the message that contained the ACTION request itself
-            messagesForAPI.append(contentsOf: messages[...historyUpToMessageIndex]) 
+            messagesForAPI.append(contentsOf: messages[...historyUpToMessageIndex])
         } else {
             print("Warning: Invalid history index (\(historyUpToMessageIndex)) for sending action result.")
             // Fallback: maybe send just the system prompt and the result? Or current full history?
             // Let's stick to the intended history for now.
         }
 
-        // Append the action result message AFTER the history
+        // Append the action result message AFTER the history for the API call
         messagesForAPI.append(ChatMessage(role: .user, content: resultWithInstruction))
-        // ------------------------------------------------------
+        // Also append the action result to the main message history
+        messages.append(ChatMessage(role: .user, content: resultWithInstruction))
+        // ---------------------------------
 
         // Prepare request body
         let requestBody = ChatCompletionRequest(model: modelId, messages: messagesForAPI)
+        // Use Ollama's OpenAI-compatible chat completions endpoint
         guard let url = URL(string: serverURL + "/v1/chat/completions") else {
             connectionError = "Invalid chat completions URL."
             isSendingMessage = false // Reset if URL fails

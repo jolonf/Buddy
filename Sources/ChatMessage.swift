@@ -17,6 +17,7 @@ struct ChatMessage: Identifiable, Codable, Equatable {
     var ttft: TimeInterval? = nil // Time To First Token (in seconds)
     var tokenCount: Int? = nil    // Approx. Tokens received (assuming 1 per non-empty chunk)
     var tps: Double? = nil        // Approx. Tokens Per Second
+    var promptTokenCount: Int? = nil // Number of tokens in this message's content
 
     // The API expects roles as lowercased strings.
     enum Role: String, Codable, Equatable {

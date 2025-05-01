@@ -149,6 +149,9 @@ struct ChatMessageRow: View {
                     if let tps = message.tps {
                         Text(String(format: "TPS: %.1f", tps))
                     }
+                    if let promptTokens = message.promptTokenCount {
+                        Text("Prompt: \(promptTokens)")
+                    }
                 }
                 .font(.caption)
                 .foregroundColor(.secondary)
