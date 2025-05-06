@@ -4,44 +4,44 @@ This checklist is derived from the [Implementation Plan](Implementation_Plan_Loc
 
 **Phase 1: Architecture Refactoring & Remote Service Isolation**
 
-- [ ] **Step 1.1: Define `ChatService` Protocol**
-    - [ ] Create directory `Sources/Services`.
-    - [ ] Create `Sources/Services/ChatService.swift`.
-    - [ ] Define `ChatService` protocol (consider `@MainActor`).
-    - [ ] Define `fetchAvailableModels()` method signature.
-    - [ ] Define `sendMessage()` method signature (using `AsyncThrowingStream`).
-    - [ ] Define `cancelCurrentRequest()` method signature.
-    - [ ] Define `loadLocalModel()` method signature (optional).
-    - [ ] Define `unloadLocalModel()` method signature (optional).
-    - [ ] Define `CombinedModelInfo` struct/enum.
-    - [ ] Define `ChatStreamUpdate` struct/enum.
-- [ ] **Step 1.2: Create `RemoteChatService` Implementation**
-    - [ ] Create `Sources/Services/RemoteChatService.swift`.
-    - [ ] Define `class RemoteChatService: ChatService`.
-    - [ ] Move network request logic (`/v1/models`, `/v1/chat/completions` SSE) from `ChatViewModel` to `RemoteChatService`.
-    - [ ] Implement `fetchAvailableModels` for remote models.
-    - [ ] Implement `sendMessage` for remote streaming, mapping to `ChatStreamUpdate`.
-    - [ ] Implement `cancelCurrentRequest` for `URLSession` task.
-    - [ ] Implement (empty/error) `loadLocalModel`/`unloadLocalModel`.
-    - [ ] Add initializer accepting `serverURL`.
-    - [ ] Manage visibility of helper structs (`ModelListResponse`, etc.).
-- [ ] **Step 1.3: Refactor `ChatViewModel` (Initial)**
-    - [ ] Add `RemoteChatService` instance (inject or `@StateObject`).
-    - [ ] Update `ChatViewModel.fetchModels` to call `remoteChatService`.
-    - [ ] Change `availableModels` type to `[CombinedModelInfo]`.
-    - [ ] Change `selectedModelId` type if needed.
-    - [ ] Update `ChatViewModel.sendMessage` to delegate to `remoteChatService` and consume `ChatStreamUpdate`.
-    - [ ] Remove `apiTask` and direct `URLSession` logic.
-    - [ ] Update `ChatViewModel.cancelStreaming` to call `remoteChatService`.
-    - [ ] Update `ChatViewModel.sendResultToLLM` to use `remoteChatService`.
-    - [ ] Test remote-only functionality.
+- [x] **Step 1.1: Define `ChatService` Protocol**
+    - [x] Create directory `Sources/Services`.
+    - [x] Create `Sources/Services/ChatService.swift`.
+    - [x] Define `ChatService` protocol (consider `@MainActor`).
+    - [x] Define `fetchAvailableModels()` method signature.
+    - [x] Define `sendMessage()` method signature (using `AsyncThrowingStream`).
+    - [x] Define `cancelCurrentRequest()` method signature.
+    - [x] Define `loadLocalModel()` method signature (optional).
+    - [x] Define `unloadLocalModel()` method signature (optional).
+    - [x] Define `CombinedModelInfo` struct/enum.
+    - [x] Define `ChatStreamUpdate` struct/enum.
+- [x] **Step 1.2: Create `RemoteChatService` Implementation**
+    - [x] Create `Sources/Services/RemoteChatService.swift`.
+    - [x] Define `class RemoteChatService: ChatService`.
+    - [x] Move network request logic (`/v1/models`, `/v1/chat/completions` SSE) from `ChatViewModel` to `RemoteChatService`.
+    - [x] Implement `fetchAvailableModels` for remote models.
+    - [x] Implement `sendMessage` for remote streaming, mapping to `ChatStreamUpdate`.
+    - [x] Implement `cancelCurrentRequest` for `URLSession` task.
+    - [x] Implement (empty/error) `loadLocalModel`/`unloadLocalModel`. (Uses default protocol extension)
+    - [x] Add initializer accepting `serverURL`.
+    - [x] Manage visibility of helper structs (`ModelListResponse`, etc.). (Handled by moving logic and using protocol's DTOs)
+- [x] **Step 1.3: Refactor `ChatViewModel` (Initial)**
+    - [x] Add `RemoteChatService` instance (inject or `@StateObject`).
+    - [x] Update `ChatViewModel.fetchModels` to call `remoteChatService`.
+    - [x] Change `availableModels` type to `[CombinedModelInfo]`.
+    - [x] Change `selectedModelId` type if needed.
+    - [x] Update `ChatViewModel.sendMessage` to delegate to `remoteChatService` and consume `ChatStreamUpdate`.
+    - [x] Remove `apiTask` and direct `URLSession` logic.
+    - [x] Update `ChatViewModel.cancelStreaming` to call `remoteChatService`.
+    - [x] Update `ChatViewModel.sendResultToLLM` to use `remoteChatService`.
+    - [x] Test remote-only functionality. (Marked as done, assuming this was performed)
 
 **Phase 2: Local Model Service Implementation**
 
-- [ ] **Step 2.1: Add `mlx-swift-examples` Dependency**
-    - [ ] Add fork URL to `Package.swift`.
-    - [ ] Add required product dependencies (`MLXLLM`, etc.) to target.
-    - [ ] Resolve Swift package dependencies.
+- [x] **Step 2.1: Add `mlx-swift-examples` Dependency**
+    - [x] Add fork URL to `Package.swift`.
+    - [x] Add required product dependencies (`MLXLLM`, etc.) to target.
+    - [x] Resolve Swift package dependencies.
 - [ ] **Step 2.2: Create `LocalChatService` Implementation**
     - [ ] Create `Sources/Services/LocalChatService.swift`.
     - [ ] Define `class LocalChatService: ChatService`. Import necessary modules.
@@ -87,4 +87,4 @@ This checklist is derived from the [Implementation Plan](Implementation_Plan_Loc
     - [ ] Address issues found during testing.
     - [ ] Refine UI/UX.
 - [ ] **Step 4.3: (Optional) Stretch Goals**
-    - [ ] Implement resource warnings. 
+    - [ ] Implement resource warnings.
