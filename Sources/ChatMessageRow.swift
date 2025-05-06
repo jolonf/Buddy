@@ -115,6 +115,8 @@ struct ChatMessageRow: View {
                     .padding(.horizontal, 5)
                     .textSelection(.enabled)
             }
+
+            statsView(for: message)
         }
 
         return AnyView(combinedView.padding(.vertical, 4)) // Add overall padding to the combined view
@@ -142,22 +144,35 @@ struct ChatMessageRow: View {
                 .textSelection(.enabled)
             // Show stats only for assistant messages
             if message.role == .assistant {
-                HStack(spacing: 10) {
-                    if let ttft = message.ttft {
-                        Text(String(format: "TTFT: %.3fs", ttft))
-                    }
-                    if let tps = message.tps {
-                        Text(String(format: "TPS: %.1f", tps))
-                    }
-                    if let promptTokens = message.promptTokenCount {
-                        Text("Prompt: \(promptTokens)")
-                    }
-                }
-                .font(.caption)
-                .foregroundColor(.secondary)
-                .padding(.leading, 5) // Align roughly with text padding
+                statsView(for: message)
             }
         }
+    }
+
+    /// Renders stats for assistant messages like TTFT, TPS, and prompt tokens.
+    @ViewBuilder
+    private func statsView(for message: ChatMessage) -> some View {
+        HStack(spacing: 10) {
+            if let ttft = message.promptTime {
+                Text(String(format: "TTFT: %.3fs", ttft))
+            }
+            if let tps = message.tps {
+                Text(String(format: "TPS: %.1f", tps))
+            }
+            if let tokenCount = message.tokenCount, let generationTime = message.generationTime,
+               generationTime > 0 {
+                Text(String(format: "TPS2: %.1f", Double(tokenCount) / generationTime))
+            }
+            if let promptTokens = message.promptTokenCount {
+                Text("Prompt: \(promptTokens)")
+            }
+            if let generationTokens = message.tokenCount {
+                Text("Gen: \(generationTokens)")
+            }       
+         }
+        .font(.caption)
+        .foregroundColor(.secondary)
+        .padding(.leading, 5) // Align roughly with text padding
     }
 
     // MARK: - Helpers (Existing)

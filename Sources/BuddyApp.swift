@@ -3,6 +3,7 @@ import SwiftUI
 import AppKit // Needed for NSApplication
 #endif
 
+#if os(macOS)
 // MARK: - AppDelegate
 // Conforms to NSApplicationDelegate to handle app lifecycle events
 class AppDelegate: NSObject, NSApplicationDelegate {
@@ -12,13 +13,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         return true
     }
 }
+#endif
 
 @main
 struct BuddyApp: App {
-    
+#if os(macOS)
     // Use the adaptor to connect our custom AppDelegate
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
-    
+#endif
     // Create all ViewModels as StateObjects at the App level
     @StateObject private var folderViewModel: FolderViewModel
     @StateObject private var chatViewModel: ChatViewModel
@@ -63,11 +65,15 @@ struct BuddyApp: App {
             NavigationSplitView {
                 FolderView()
             } content: {
+#if os(macOS)
                 // Use VSplitView for File Content and Command Runner
                 VSplitView {
                     FileContentView()
                     CommandRunnerView()
                 }
+#else
+                FileContentView()
+#endif
             } detail: {
                 ChatView()
                     // Reduced width constraints for the detail pane

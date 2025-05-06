@@ -8,7 +8,9 @@ import Foundation
 class ActionHandler {
 
     private let folderViewModel: FolderViewModel
+    #if os(macOS)
     private let commandRunnerViewModel: CommandRunnerViewModel
+    #endif
 
     // Define a callback closure type to send results back to ChatViewModel
     typealias ActionResultCallback = (String, Int) async -> Void // Added index

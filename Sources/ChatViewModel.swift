@@ -45,6 +45,10 @@ struct StreamChunk: Decodable {
         let prompt_tokens: Int
         let completion_tokens: Int
         let total_tokens: Int
+
+        // Non-standard properties
+        let prompt_time: Double?
+        let generation_time: Double?
     }
 }
 
@@ -285,7 +289,7 @@ class ChatViewModel: ObservableObject {
             print("DEBUG: Starting stream processing for request starting at \(requestStartTime)") // Add timing info
             for try await line in bytes.lines {
                 if line.hasPrefix("data:"), let data = line.dropFirst(6).data(using: .utf8) {
-                    if data.isEmpty || data == Data("[DONE]".utf8) { continue }
+                    if data.isEmpty || data == Data("[DONE]".utf8) { break }
                     
                     do {
                         let chunk = try JSONDecoder().decode(StreamChunk.self, from: data)
@@ -338,6 +342,8 @@ class ChatViewModel: ObservableObject {
                             messages[index].promptTokenCount = usage.prompt_tokens
                             // Update total token count as well, might be useful later
                             messages[index].tokenCount = usage.completion_tokens
+                            messages[index].promptTime = usage.prompt_time
+                            messages[index].generationTime = usage.generation_time
                         }
 
                         // 3. Check for finish reason (but DO NOT break the loop)
@@ -412,7 +418,7 @@ class ChatViewModel: ObservableObject {
         isSendingMessage = true // Mark as busy
         connectionError = nil
 
-        let resultWithInstruction = "Based on the following action result, please formulate a response for the user:\n\n\(actionResult)"
+        //let resultWithInstruction = "Based on the following action result, please formulate a response for the user:\n\n\(actionResult)"
 
         // --- Prepare message history in chronological order ---
         var messagesForAPI: [ChatMessage] = []
@@ -430,9 +436,9 @@ class ChatViewModel: ObservableObject {
         }
 
         // Append the action result message AFTER the history for the API call
-        messagesForAPI.append(ChatMessage(role: .user, content: resultWithInstruction))
+        messagesForAPI.append(ChatMessage(role: .user, content: actionResult))
         // Also append the action result to the main message history
-        messages.append(ChatMessage(role: .user, content: resultWithInstruction))
+        messages.append(ChatMessage(role: .user, content: actionResult))
         // ---------------------------------
 
         // Prepare request body

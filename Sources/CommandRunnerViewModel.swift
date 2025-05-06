@@ -2,6 +2,8 @@ import SwiftUI
 import Foundation
 import Combine
 
+#if os(macOS)
+
 // Revert to struct
 struct CommandHistoryEntry: Identifiable, Equatable {
     let id = UUID()
@@ -287,3 +289,5 @@ class CommandRunnerViewModel: ObservableObject {
         }
     }
 } 
+
+#endif
