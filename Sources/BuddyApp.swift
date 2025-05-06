@@ -40,8 +40,12 @@ struct BuddyApp: App {
         let commandRunnerVM = CommandRunnerViewModel()
         _commandRunnerViewModel = StateObject(wrappedValue: commandRunnerVM)
         
-        // Now create chatViewModel, passing folderVM and commandRunnerVM
-        _chatViewModel = StateObject(wrappedValue: ChatViewModel(folderViewModel: folderVM, commandRunnerViewModel: commandRunnerVM))
+        // Create RemoteChatService instance
+        // TODO: Make server URL configurable later
+        let remoteService = RemoteChatService(serverURL: "http://localhost:1234")
+        
+        // Now create chatViewModel, passing folderVM, commandRunnerVM, and remoteService
+        _chatViewModel = StateObject(wrappedValue: ChatViewModel(folderViewModel: folderVM, commandRunnerViewModel: commandRunnerVM, remoteChatService: remoteService))
 
         // --- Connect ViewModels ---
         folderVM.setup(fileContentViewModel: fileContentVM)

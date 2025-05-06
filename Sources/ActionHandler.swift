@@ -172,7 +172,7 @@ class ActionHandler {
                     return formatErrorResult(action: action, message: "Access denied: Path is outside the selected folder.")
                 }
                 
-                try newContent.write(to: fileURL, atomically: true, encoding: .utf8)
+                try newContent.write(to: fileURL, atomically: true, encoding: String.Encoding.utf8)
                 
                 resultString = """
                 ACTION_RESULT: EDIT_FILE(path='\(relativePath)')

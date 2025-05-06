@@ -220,7 +220,10 @@ private struct TypingIndicatorView: View {
     // Create dummy view models for the preview
     let folderVM = FolderViewModel()
     let commandRunnerVM = CommandRunnerViewModel() // Create dummy command runner
-    let chatVM = ChatViewModel(folderViewModel: folderVM, commandRunnerViewModel: commandRunnerVM) // Pass dependencies
+    // Create a dummy remote service for the preview
+    let remoteService = RemoteChatService(serverURL: "http://localhost:1234")
+    // Update ChatViewModel initialization to include the service
+    let chatVM = ChatViewModel(folderViewModel: folderVM, commandRunnerViewModel: commandRunnerVM, remoteChatService: remoteService)
     
     return ChatView()
         // Provide ALL required view models to the environment for the preview
