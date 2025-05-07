@@ -2,8 +2,7 @@ import Foundation
 import SwiftUI // For @MainActor
 
 /// Service responsible for communicating with a remote LLM API (Ollama/LM Studio compatible).
-@MainActor
-class RemoteChatService: ChatService {
+class RemoteChatService: ChatService, @unchecked Sendable {
 
     private let serverURL: String
     private var currentTask: Task<Void, Never>? = nil
@@ -151,13 +150,14 @@ class RemoteChatService: ChatService {
             // Store the task for cancellation
             self.currentTask = task
             // Set up cancellation handler
+            // Only cancel the task in the @Sendable closure to avoid capturing self
             continuation.onTermination = { @Sendable _ in
                 print("Stream terminated. Cancelling remote task.")
                 task.cancel()
-                // Ensure mutation happens on the main actor
-                Task { @MainActor in
-                    self.currentTask = nil
-                }
+            }
+            // After the stream finishes, clear currentTask on the main actor
+            Task { @MainActor in
+                self.currentTask = nil
             }
         }
     }

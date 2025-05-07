@@ -31,7 +31,6 @@ enum ChatStreamUpdate {
 }
 
 /// Protocol defining the interface for interacting with a chat service (local or remote).
-@MainActor // Assume methods might interact with UI state, enforce main thread
 protocol ChatService {
     /// Fetches the list of models available from the service.
     func fetchAvailableModels() async throws -> [CombinedModelInfo]
@@ -62,7 +61,7 @@ protocol ChatService {
 
     /// Unloads the currently loaded local model from memory.
     /// Default implementation could do nothing.
-    func unloadLocalModel()
+    func unloadLocalModel() async
 }
 
 // Provide default implementations for optional methods
@@ -72,7 +71,7 @@ extension ChatService {
         print("Warning: loadLocalModel not implemented by \(type(of: self))")
     }
 
-    func unloadLocalModel() {
+    func unloadLocalModel() async {
         // Default: Do nothing
         print("Warning: unloadLocalModel not implemented by \(type(of: self))")
     }
