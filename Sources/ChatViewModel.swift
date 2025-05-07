@@ -70,23 +70,52 @@ class ChatViewModel: ObservableObject {
     // Add the ActionHandler instance
     private let actionHandler: ActionHandler
 
+    // Store system prompts for both modes
+    private var systemPromptAgent: String?
+    private var systemPromptAsk: String?
+
     init(folderViewModel: FolderViewModel, commandRunnerViewModel: CommandRunnerViewModel, remoteChatService: RemoteChatService, localChatService: LocalChatService) { 
         self.folderViewModel = folderViewModel 
         self.commandRunnerViewModel = commandRunnerViewModel
         self.remoteChatService = remoteChatService // Store the service
         self.localChatService = localChatService // Store the local service
-        // Create the ActionHandler instance, passing dependencies
         self.actionHandler = ActionHandler(folderViewModel: folderViewModel, commandRunnerViewModel: commandRunnerViewModel)
-        
         // Fetch models asynchronously on initialization
         Task {
             await fetchModels()
         }
-        
         // Register the callback
-        // Use weak self to avoid retain cycles if ActionHandler held a strong ref back
         actionHandler.registerSendResultCallback { [weak self] result, index in
             await self?.sendResultToLLM(actionResult: result, historyUpToMessageIndex: index)
+        }
+    }
+
+    // Helper to load a system prompt from file
+    private static func loadSystemPromptFromFile(filename: String) -> String {
+        guard let fileURL = Bundle.module.url(forResource: filename, withExtension: "txt") else {
+            print("Error: System prompt file \(filename).txt not found within Bundle.module.")
+            return "You are a helpful AI assistant."
+        }
+        do {
+            return try String(contentsOf: fileURL, encoding: .utf8)
+        } catch {
+            print("Error loading system prompt from \(fileURL): \(error)")
+            return "You are a helpful AI assistant."
+        }
+    }
+
+    private func loadSystemPrompt() -> String {
+        switch interactionMode {
+        case .agent:
+            if let prompt = systemPromptAgent { return prompt }
+            let loaded = Self.loadSystemPromptFromFile(filename: "system_prompt_agent")
+            systemPromptAgent = loaded
+            return loaded
+        case .ask:
+            if let prompt = systemPromptAsk { return prompt }
+            let loaded = Self.loadSystemPromptFromFile(filename: "system_prompt_ask")
+            systemPromptAsk = loaded
+            return loaded
         }
     }
 
@@ -163,32 +192,6 @@ class ChatViewModel: ObservableObject {
     }
 
     // --- Chat Actions ---
-
-    private func loadSystemPrompt() -> String {
-        let filename = interactionMode == .agent ? "system_prompt_agent" : "system_prompt_ask"
-        
-        // Use Bundle.module to find resources within the package target
-        // It automatically handles the correct location within the build products (like _Buddy.bundle)
-        guard let fileURL = Bundle.module.url(forResource: filename, withExtension: "txt") else {
-            print("Error: System prompt file \(filename).txt not found within Bundle.module.")
-            // Fallback prompt if file loading fails
-            return "You are a helpful AI assistant."
-        }
-        
-        // Use the existing helper to load the content
-        return loadString(from: fileURL)
-    }
-
-    // Helper to load string content and handle errors
-    private func loadString(from url: URL) -> String {
-        do {
-            return try String(contentsOf: url, encoding: .utf8)
-        } catch {
-            print("Error loading system prompt from \(url): \(error)")
-            // Fallback prompt on read error
-            return "You are a helpful AI assistant."
-        }
-    }
 
     func sendMessage() {
         guard !currentInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
@@ -435,7 +438,7 @@ class ChatViewModel: ObservableObject {
         // --- Prepare message history in chronological order ---
         var messagesForAPI: [ChatMessage] = []
         let systemPrompt = loadSystemPrompt() // Use current mode's prompt
-        messagesForAPI.append(ChatMessage(role: .system, content: systemPrompt))
+        //messagesForAPI.append(ChatMessage(role: .system, content: systemPrompt))
 
         // Append history UP TO and INCLUDING the message that requested the action
         if historyUpToMessageIndex >= 0 && historyUpToMessageIndex < messages.count {

@@ -101,6 +101,8 @@ class LocalChatService: ChatService, @unchecked Sendable {
                     var mlxMessages: [Chat.Message] = []
                     if !systemPrompt.isEmpty {
                         mlxMessages.append(Chat.Message(role: .system, content: systemPrompt))
+                    } else {
+                        print("Warning: no system prompt")
                     }
                     for messageItem in history {
                         let role: Chat.Message.Role
@@ -111,6 +113,11 @@ class LocalChatService: ChatService, @unchecked Sendable {
                         }
                         mlxMessages.append(Chat.Message(role: role, content: messageItem.content))
                     }
+
+                    for message in mlxMessages {
+                        print("\u{001B}[0;36m\(message.role)\u{001B}[0m \u{001B}[0;33m\(message.content.prefix(80))\u{001B}[0m\(message.content.count > 80 ? "..." : "")")
+                    }
+
                     let userInput = UserInput(chat: mlxMessages)
 
                     let generationStreamResult: AsyncStream<Generation> = try await container.perform { (context: ModelContext) -> AsyncStream<Generation> in
@@ -140,7 +147,7 @@ class LocalChatService: ChatService, @unchecked Sendable {
                             input: lmInputForGeneration,
                             parameters: parameters,
                             context: context,
-                            cache: nil //kvCachesForGeneration
+                            cache: kvCachesForGeneration
                         )
                     }
                     
