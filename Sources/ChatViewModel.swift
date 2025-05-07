@@ -16,6 +16,14 @@ import SwiftUI // Needed for ObservableObject and @Published
 
 // MARK: - ViewModel
 
+// Step 2: Add LoadingState enum for local model loading
+enum LoadingState: Equatable {
+    case idle
+    case loading(progress: Double?)
+    case loaded(CombinedModelInfo)
+    case error(String)
+}
+
 /// Manages the state and logic for the chat view.
 @MainActor // Ensure UI updates happen on the main thread
 class ChatViewModel: ObservableObject {
@@ -27,7 +35,7 @@ class ChatViewModel: ObservableObject {
 
     // Add ChatService instance
     private let remoteChatService: RemoteChatService
-    // TODO: Add LocalChatService later
+    private let localChatService: LocalChatService
 
     @Published var messages: [ChatMessage] = []
     @Published var currentInput: String = ""
@@ -53,6 +61,8 @@ class ChatViewModel: ObservableObject {
     @Published var selectedModelId: CombinedModelInfo.ID? = nil // Use CombinedModelInfo.ID
     @Published var isLoadingModels: Bool = false
     @Published var connectionError: String? = nil
+    // Step 2: Local model loading state
+    @Published var localModelLoadingState: LoadingState = .idle
     // ---------------------------------
 
     private var chatStreamTask: Task<Void, Never>? = nil // To manage the service stream task
@@ -60,10 +70,11 @@ class ChatViewModel: ObservableObject {
     // Add the ActionHandler instance
     private let actionHandler: ActionHandler
 
-    init(folderViewModel: FolderViewModel, commandRunnerViewModel: CommandRunnerViewModel, remoteChatService: RemoteChatService) { 
+    init(folderViewModel: FolderViewModel, commandRunnerViewModel: CommandRunnerViewModel, remoteChatService: RemoteChatService, localChatService: LocalChatService) { 
         self.folderViewModel = folderViewModel 
         self.commandRunnerViewModel = commandRunnerViewModel
         self.remoteChatService = remoteChatService // Store the service
+        self.localChatService = localChatService // Store the local service
         // Create the ActionHandler instance, passing dependencies
         self.actionHandler = ActionHandler(folderViewModel: folderViewModel, commandRunnerViewModel: commandRunnerViewModel)
         
@@ -85,25 +96,67 @@ class ChatViewModel: ObservableObject {
         isLoadingModels = true
         connectionError = nil
         availableModels = [] // Clear previous models
+        localModelLoadingState = .idle // Reset local model loading state
 
-        // TODO: Later, call both local and remote services and combine
-        do {
-            let remoteModels = try await remoteChatService.fetchAvailableModels()
-            availableModels = remoteModels // Assign CombinedModelInfo directly
-
-            // Select the first model by default if available
-            // Ensure it's a remote model for now
-            if let firstModel = availableModels.first(where: { $0.type == .remote }) {
-                selectedModelId = firstModel.id
-            } else {
-                selectedModelId = nil // No remote models found
+        async let remoteModelsResult: Result<[CombinedModelInfo], Error> = Task {
+            do {
+                let models = try await remoteChatService.fetchAvailableModels()
+                return .success(models)
+            } catch {
+                return .failure(error)
             }
-        } catch {
-            print("Error fetching models: \(error)")
-            connectionError = "Failed to fetch models: \(error.localizedDescription)"
-            // Optionally clear models if fetch fails completely
-            // availableModels = []
+        }.value
+
+        async let localModelsResult: Result<[CombinedModelInfo], Error> = Task {
+            do {
+                let models = try await localChatService.fetchAvailableModels()
+                return .success(models)
+            } catch {
+                return .failure(error)
+            }
+        }.value
+
+        let remoteResult = await remoteModelsResult
+        let localResult = await localModelsResult
+
+        var combined: [CombinedModelInfo] = []
+        var remoteError: String? = nil
+        var localError: String? = nil
+
+        switch remoteResult {
+        case .success(let models):
+            combined.append(contentsOf: models)
+        case .failure(let error):
+            remoteError = "Remote: \(error.localizedDescription)"
+        }
+
+        switch localResult {
+        case .success(let models):
+            combined.append(contentsOf: models)
+        case .failure(let error):
+            localError = "Local: \(error.localizedDescription)"
+        }
+
+        availableModels = combined
+
+        // Prefer remote model for default selection, else local
+        if let firstRemote = combined.first(where: { $0.type == .remote }) {
+            selectedModelId = firstRemote.id
+        } else if let firstLocal = combined.first(where: { $0.type == .local }) {
+            selectedModelId = firstLocal.id
+        } else {
             selectedModelId = nil
+        }
+
+        // Combine errors if any
+        if let remoteError = remoteError, let localError = localError {
+            connectionError = remoteError + "\n" + localError
+        } else if let remoteError = remoteError {
+            connectionError = remoteError
+        } else if let localError = localError {
+            connectionError = localError
+        } else {
+            connectionError = nil
         }
 
         isLoadingModels = false
@@ -147,18 +200,113 @@ class ChatViewModel: ObservableObject {
             return
         }
 
-        // Ensure it's a remote model for this initial refactoring phase
-        guard model.type == .remote else {
-            print("Error: Selected model is not a remote model. Local model handling not yet implemented.")
-            connectionError = "Local model support not yet available."
+        // Step 5: Handle local and remote models
+        if model.type == .local {
+            // Local model: ensure loaded, then send message
+            guard !isSendingMessage else {
+                print("Already sending a message.")
+                return
+            }
+            isSendingMessage = true
+            isAwaitingFirstToken = true
+            connectionError = nil
+            Task {
+                // Ensure the model is loaded
+                await loadSelectedLocalModelIfNeeded()
+                // Check if loading failed
+                if case .error(let errMsg) = localModelLoadingState {
+                    connectionError = "Local model load error: \(errMsg)"
+                    isSendingMessage = false
+                    isAwaitingFirstToken = false
+                    return
+                }
+                // Append user message immediately
+                let userMessage = ChatMessage(role: .user, content: currentInput)
+                messages.append(userMessage)
+                let historyForRequest = messages
+                let interactionModeForRequest = interactionMode
+                let systemPrompt = loadSystemPrompt()
+                currentInput = ""
+                // Cancel any previous stream task before starting a new one
+                chatStreamTask?.cancel()
+                chatStreamTask = Task {
+                    var assistantResponseMessage = ChatMessage(role: .assistant, content: "")
+                    var messageIndex: Int? = nil
+                    do {
+                        let stream = localChatService.sendMessage(
+                            history: historyForRequest,
+                            systemPrompt: systemPrompt,
+                            model: model,
+                            interactionMode: interactionModeForRequest
+                        )
+                        for try await update in stream {
+                            if Task.isCancelled { break }
+                            switch update {
+                            case .contentDelta(let deltaContent):
+                                if isAwaitingFirstToken { isAwaitingFirstToken = false }
+                                assistantResponseMessage.content += deltaContent
+                                if messageIndex == nil {
+                                    messages.append(assistantResponseMessage)
+                                    messageIndex = messages.count - 1
+                                } else {
+                                    messages[messageIndex!].content = assistantResponseMessage.content
+                                }
+                                scrollTrigger = UUID()
+                            case .usage(let usageMetrics):
+                                if let index = messageIndex {
+                                    messages[index].promptTokenCount = usageMetrics.prompt_tokens
+                                    messages[index].tokenCount = usageMetrics.completion_tokens
+                                    messages[index].promptTime = usageMetrics.prompt_time
+                                    messages[index].generationTime = usageMetrics.generation_time
+                                }
+                            case .firstTokenTime(let ttft):
+                                assistantResponseMessage.ttft = ttft
+                                if let index = messageIndex { messages[index].ttft = ttft }
+                            case .finalMetrics(let tps, let tokenCount):
+                                if let index = messageIndex {
+                                    messages[index].tps = tps
+                                    if messages[index].tokenCount == nil { messages[index].tokenCount = tokenCount }
+                                }
+                            case .error(let error):
+                                print("Stream error: \(error)")
+                                connectionError = "Stream error: \(error.localizedDescription)"
+                            }
+                        }
+                        if Task.isCancelled {
+                            print("Local chat stream task cancelled.")
+                        } else {
+                            print("Local chat stream finished.")
+                            if interactionModeForRequest == .agent, let msgIndex = messageIndex, msgIndex < messages.count {
+                                let finalContent = messages[msgIndex].content
+                                Task {
+                                    await self.actionHandler.parseAndExecuteActions(responseContent: finalContent, originalMessageIndex: msgIndex)
+                                }
+                            }
+                        }
+                    } catch {
+                        if !(error is CancellationError) {
+                            print("Error processing local chat stream: \(error)")
+                            connectionError = "Chat error: \(error.localizedDescription)"
+                        }
+                    }
+                    isSendingMessage = false
+                    isAwaitingFirstToken = false
+                    chatStreamTask = nil
+                }
+            }
             return
         }
 
+        // Remote model (existing logic)
+        guard model.type == .remote else {
+            print("Error: Unknown model type.")
+            connectionError = "Unknown model type."
+            return
+        }
         guard !isSendingMessage else {
             print("Already sending a message.")
             return
         }
-
         isSendingMessage = true
         isAwaitingFirstToken = true // Set awaiting flag before starting task
         connectionError = nil // Clear previous errors
@@ -273,11 +421,10 @@ class ChatViewModel: ObservableObject {
     // --- Action Parsing & Execution ---
 
     private func sendResultToLLM(actionResult: String, historyUpToMessageIndex: Int) async {
-        print("--- Sending Action Result Back to LLM --- (Needs Refactoring) ---")
+        print("--- Sending Action Result Back to LLM --- (Refactored for local/remote) ---")
         guard let currentModelId = selectedModelId,
-              let model = availableModels.first(where: { $0.id == currentModelId && $0.type == .remote }) else {
-            print("Error: No remote model selected for sending action result.")
-            // How to handle this error? Maybe append to messages?
+              let model = availableModels.first(where: { $0.id == currentModelId }) else {
+            print("Error: No model selected for sending action result.")
             return
         }
 
@@ -303,19 +450,28 @@ class ChatViewModel: ObservableObject {
         // Cancel previous task
         chatStreamTask?.cancel()
 
-        // --- Use Service --- (New Logic)
+        // --- Use Service ---
         let interactionModeForRequest = interactionMode // Capture current mode
         chatStreamTask = Task {
             var assistantResponseMessage = ChatMessage(role: .assistant, content: "")
             var messageIndex: Int? = nil
             do {
-                let stream = remoteChatService.sendMessage(
-                    history: messagesForAPI, // Send the specifically prepared history
-                    systemPrompt: systemPrompt,
-                    model: model,
-                    interactionMode: interactionModeForRequest // Send current mode
-                )
-                // Consume stream (Copy & adapt logic from sendMessage stream consumer)
+                let stream: AsyncThrowingStream<ChatStreamUpdate, Error>
+                if model.type == .local {
+                    stream = localChatService.sendMessage(
+                        history: messagesForAPI,
+                        systemPrompt: systemPrompt,
+                        model: model,
+                        interactionMode: interactionModeForRequest
+                    )
+                } else {
+                    stream = remoteChatService.sendMessage(
+                        history: messagesForAPI,
+                        systemPrompt: systemPrompt,
+                        model: model,
+                        interactionMode: interactionModeForRequest
+                    )
+                }
                 for try await update in stream {
                     if Task.isCancelled { break }
                     switch update {
@@ -369,12 +525,55 @@ class ChatViewModel: ObservableObject {
         // Reset state immediately
         isSendingMessage = false
         isAwaitingFirstToken = false
+        // Step 6: Cancel the correct service's request
+        if let currentModelId = selectedModelId,
+           let model = availableModels.first(where: { $0.id == currentModelId }) {
+            if model.type == .local {
+                localChatService.cancelCurrentRequest()
+            } else if model.type == .remote {
+                remoteChatService.cancelCurrentRequest()
+            }
+        }
     }
 
     // Placeholder removed - functionality implemented
     func clearChat() {
         cancelStreaming() // Cancel any ongoing stream before clearing
         messages = []
+    }
+
+    // Step 4: Helper to check if the selected local model is loaded
+    var isSelectedLocalModelLoaded: Bool {
+        guard let selectedId = selectedModelId,
+              let selected = availableModels.first(where: { $0.id == selectedId && $0.type == .local })
+        else { return false }
+        // Check if the localChatService has this model loaded (by id)
+        // We'll need to expose a method or property on LocalChatService for this if not already present
+        // For now, assume LocalChatService has a method: isModelLoaded(id: String) -> Bool
+        // For now, always return false to avoid compile error.
+        return localChatServiceIsModelLoaded(selected.id)
+    }
+
+    // Placeholder for LocalChatService model loaded check
+    private func localChatServiceIsModelLoaded(_ id: String) -> Bool {
+        // Compare the full unique ID (with 'local:' prefix)
+        return localChatService.currentModelId == id
+    }
+
+    // Step 4: Method to load the selected local model if needed
+    func loadSelectedLocalModelIfNeeded() async {
+        guard let selectedId = selectedModelId,
+              let selected = availableModels.first(where: { $0.id == selectedId && $0.type == .local })
+        else { return }
+        if !localChatServiceIsModelLoaded(selected.id) {
+            localModelLoadingState = .loading(progress: nil)
+            do {
+                try await localChatService.loadLocalModel(selected)
+                localModelLoadingState = .loaded(selected)
+            } catch {
+                localModelLoadingState = .error(error.localizedDescription)
+            }
+        }
     }
 }
  

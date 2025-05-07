@@ -3,27 +3,21 @@ import SwiftUI
 import MLX
 import MLXLMCommon
 import MLXLLM
-import Hub
+@preconcurrency import Hub
 
 #if os(macOS)
-extension HubApi: @retroactive @unchecked Sendable {
+extension HubApi {
     /// Default HubApi instance configured to download models to the user's Downloads directory under a 'huggingface' subdirectory.
-    static var `default`: HubApi {
-        // This getter is @MainActor, so access is safe
-        // swiftlint:disable:next actor_isolation
-        @MainActor get {
-            HubApi(
-                downloadBase: FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask)[0].appendingPathComponent("huggingface", isDirectory: true)
+    static let `default` = HubApi(
+                downloadBase: URL.downloadsDirectory.appendingPathComponent("huggingface", isDirectory: true)
             )
-        }
-    }
 }
 #endif
 
 class LocalChatService: ChatService, @unchecked Sendable {
 
     private var currentModelContainer: ModelContainer?
-    private var currentModelId: String?
+    internal var currentModelId: String?
     private var currentPromptCache: PromptCache?
     private var generationTask: Task<Void, Never>?
 
@@ -35,12 +29,7 @@ class LocalChatService: ChatService, @unchecked Sendable {
         print("DEBUG: fetchAvailableModels() called in LocalChatService")
         
         let fileManager = FileManager.default
-        guard let downloadsURL = fileManager.urls(for: .downloadsDirectory, in: .userDomainMask).first else {
-            print("Error: Could not find Downloads directory.")
-            return []
-        }
-        
-        let huggingFaceDirURL = downloadsURL.appendingPathComponent("huggingface", isDirectory: true)
+        let huggingFaceDirURL = URL.downloadsDirectory.appending(path: "huggingface/models")
         
         var isDirectory: ObjCBool = false
         guard fileManager.fileExists(atPath: huggingFaceDirURL.path, isDirectory: &isDirectory), isDirectory.boolValue else {
@@ -63,7 +52,7 @@ class LocalChatService: ChatService, @unchecked Sendable {
                 let currentRelativePath = basePath.isEmpty ? itemName : "\(basePath)/\(itemName)"
 
                 if await isPotentialModelDirectory(url: itemURL, fileManager: fileManager) {
-                    discoveredModels.append(CombinedModelInfo(id: currentRelativePath, displayName: itemName, type: .local))
+                    discoveredModels.append(CombinedModelInfo(id: "local:\(currentRelativePath)", displayName: itemName, type: .local))
                 } else if basePath.isEmpty {
                     let subContents = try fileManager.contentsOfDirectory(at: itemURL, includingPropertiesForKeys: [.isDirectoryKey], options: .skipsHiddenFiles)
                     for subItemURL in subContents {
@@ -74,7 +63,7 @@ class LocalChatService: ChatService, @unchecked Sendable {
                         let subItemName = subItemURL.lastPathComponent
                         let subItemRelativePath = "\(currentRelativePath)/\(subItemName)"
                         if await isPotentialModelDirectory(url: subItemURL, fileManager: fileManager) {
-                            discoveredModels.append(CombinedModelInfo(id: subItemRelativePath, displayName: subItemName, type: .local))
+                            discoveredModels.append(CombinedModelInfo(id: "local:\(subItemRelativePath)", displayName: subItemName, type: .local))
                         }
                     }
                 }
@@ -125,15 +114,15 @@ class LocalChatService: ChatService, @unchecked Sendable {
                     let userInput = UserInput(chat: mlxMessages)
 
                     let generationStreamResult: AsyncStream<Generation> = try await container.perform { (context: ModelContext) -> AsyncStream<Generation> in
+                        let parameters = GenerateParameters(temperature: 0.7)
                         if self.currentPromptCache == nil {
                             print("PromptCache was nil, initializing inside perform for model \(self.currentModelId ?? "unknown").")
-                            self.currentPromptCache = PromptCache(cache: context.model.newCache(parameters: GenerateParameters()))
+                            self.currentPromptCache = PromptCache(cache: context.model.newCache(parameters: parameters))
                         }
                         guard let cacheForThisGeneration = self.currentPromptCache else {
                             throw NSError(domain: "LocalChatService", code: -5, userInfo: [NSLocalizedDescriptionKey: "Prompt cache is unexpectedly nil after attempted initialization."])
                         }
                         let fullPromptLmInput = try await context.processor.prepare(input: userInput)
-                        let parameters = GenerateParameters(temperature: 0.7)
                         var lmInputForGeneration: LMInput
                         var kvCachesForGeneration: [KVCache]
                         if let suffixTokens = cacheForThisGeneration.getUncachedSuffix(prompt: fullPromptLmInput.text.tokens) {
@@ -151,7 +140,7 @@ class LocalChatService: ChatService, @unchecked Sendable {
                             input: lmInputForGeneration,
                             parameters: parameters,
                             context: context,
-                            cache: kvCachesForGeneration
+                            cache: nil //kvCachesForGeneration
                         )
                     }
                     
@@ -223,14 +212,14 @@ class LocalChatService: ChatService, @unchecked Sendable {
             guard let downloadsURL = fileManager.urls(for: .downloadsDirectory, in: .userDomainMask).first else {
                 throw NSError(domain: "LocalChatService", code: -10, userInfo: [NSLocalizedDescriptionKey: "Could not find Downloads directory."])
             }
-            let huggingFaceDirURL = downloadsURL.appendingPathComponent("huggingface", isDirectory: true)
-            let modelDirectoryURL = huggingFaceDirURL.appendingPathComponent(modelInfo.id, isDirectory: true)
+            let huggingFaceDirURL = downloadsURL.appendingPathComponent("huggingface/models", isDirectory: true)
+            let modelId = modelInfo.id.hasPrefix("local:") ? String(modelInfo.id.dropFirst(6)) : modelInfo.id
+            let modelDirectoryURL = huggingFaceDirURL.appendingPathComponent(modelId, isDirectory: true)
             let config = ModelConfiguration(directory: modelDirectoryURL)
             print("Attempting to load model with directory: \(modelDirectoryURL.path) using ModelConfiguration.")
             MLX.GPU.set(cacheLimit: 20 * 1024 * 1024)
 
-            // Use MainActor to access HubApi.default safely
-            let hubApi = await MainActor.run { HubApi.default }
+            let hubApi = HubApi.default
             let container = try await LLMModelFactory.shared.loadContainer(
                 hub: hubApi,
                 configuration: config
@@ -238,17 +227,6 @@ class LocalChatService: ChatService, @unchecked Sendable {
             
             self.currentModelContainer = container
             self.currentModelId = modelInfo.id
-            
-            if let promptCache = await container.perform({ (ctx: ModelContext) -> PromptCache? in
-                // ModelContext is not Sendable, so do all work inside this closure
-                PromptCache(cache: ctx.model.newCache(parameters: GenerateParameters()))
-            }) {
-                self.currentPromptCache = promptCache
-                print("PromptCache initialized after loading model \(modelInfo.displayName).")
-            } else {
-                self.currentPromptCache = nil
-                print("Warning: Could not get model context to initialize prompt cache for \(modelInfo.displayName). It will be created on first sendMessage.")
-            }
 
             print("Successfully loaded local model: \(modelInfo.displayName)")
         } catch {

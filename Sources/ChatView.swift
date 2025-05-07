@@ -16,10 +16,25 @@ struct ChatView: View {
         VStack(spacing: 0) {
             // --- Top Bar: Connection Status & Model Selection ---
             VStack(spacing: 4) {
-                if let error = viewModel.connectionError {
-                    Text("Error: \(error)")
+                // Only show error if it's a local model loading error
+                if case .error(let error) = viewModel.localModelLoadingState {
+                    Text("Local Model Error: \(error)")
                         .foregroundColor(.red)
                         .padding(.horizontal)
+                } else if case .loading(let progress) = viewModel.localModelLoadingState {
+                    HStack {
+                        if let progress = progress {
+                            ProgressView(value: progress)
+                                .frame(width: 80)
+                            Text(String(format: "Loading model... %.0f%%", progress * 100))
+                                .foregroundColor(.secondary)
+                        } else {
+                            ProgressView()
+                                .scaleEffect(0.8)
+                            Text("Loading model...")
+                                .foregroundColor(.secondary)
+                        }
+                    }
                 } else if viewModel.isLoadingModels {
                     HStack {
                         ProgressView()
@@ -93,14 +108,48 @@ struct ChatView: View {
             // Divider and Picker/Refresh row moved above input
             Divider()
             HStack {
+                let remoteModels = viewModel.availableModels.filter { $0.type == .remote }
+                let localModels = viewModel.availableModels.filter { $0.type == .local }
                 Picker("Selected Model", selection: $viewModel.selectedModelId) {
-                    ForEach(viewModel.availableModels) { model in
-                        Text(model.id).tag(String?(model.id))
+                    if !remoteModels.isEmpty {
+                        Section(header: HStack {
+                            Text("Remote Models")
+                            if viewModel.connectionError?.contains("Remote:") == true {
+                                Text("(Unavailable)").foregroundColor(.gray).font(.caption)
+                            }
+                        }) {
+                            ForEach(remoteModels) { model in
+                                Text(model.displayName).tag(model.id)
+                            }
+                        }
+                    }
+                    if !localModels.isEmpty {
+                        Section(header: Text("Local Models")) {
+                            ForEach(localModels) { model in
+                                HStack {
+                                    Text(model.displayName)
+                                    if viewModel.selectedModelId == model.id {
+                                        switch viewModel.localModelLoadingState {
+                                        case .loading:
+                                            ProgressView().scaleEffect(0.6)
+                                        case .error(let msg):
+                                            Image(systemName: "exclamationmark.triangle.fill").foregroundColor(.red)
+                                            Text(msg).foregroundColor(.red).font(.caption)
+                                        case .loaded(let loadedModel) where loadedModel.id == model.id:
+                                            Image(systemName: "checkmark.circle.fill").foregroundColor(.green)
+                                        default:
+                                            EmptyView()
+                                        }
+                                    }
+                                }
+                                .tag(model.id)
+                            }
+                        }
                     }
                 }
                 .labelsHidden()
-                .disabled(viewModel.isLoadingModels || viewModel.connectionError != nil || viewModel.availableModels.isEmpty)
-                
+                .disabled(viewModel.isLoadingModels || viewModel.availableModels.isEmpty)
+                // Only disable if loading or no models at all
                 Button {
                     Task { await viewModel.fetchModels() }
                 } label: {
@@ -222,10 +271,11 @@ private struct TypingIndicatorView: View {
     let commandRunnerVM = CommandRunnerViewModel() // Create dummy command runner
     // Create a dummy remote service for the preview
     let remoteService = RemoteChatService(serverURL: "http://localhost:1234")
+    let localService = LocalChatService()
     // Update ChatViewModel initialization to include the service
-    let chatVM = ChatViewModel(folderViewModel: folderVM, commandRunnerViewModel: commandRunnerVM, remoteChatService: remoteService)
+    let chatVM = ChatViewModel(folderViewModel: folderVM, commandRunnerViewModel: commandRunnerVM, remoteChatService: remoteService, localChatService: localService)
     
-    return ChatView()
+    ChatView()
         // Provide ALL required view models to the environment for the preview
         .environmentObject(folderVM)
         .environmentObject(chatVM) // <<< Add ChatViewModel injection

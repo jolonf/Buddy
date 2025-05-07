@@ -19,7 +19,7 @@ let package = Package(
     ],
     dependencies: [
         // Add the main MLX Swift package
-        .package(url: "https://github.com/ml-explore/mlx-swift", from: "0.21.2"),
+        .package(url: "https://github.com/ml-explore/mlx-swift", .upToNextMajor(from: "0.21.2")),
         // Reference the specific fork and branch for examples
         .package(url: "https://github.com/jolonf/mlx-swift-examples", branch: "feature/prompt-caching"),
         // Add Hugging Face Swift Transformers package

@@ -33,7 +33,7 @@ class RemoteChatService: ChatService, @unchecked Sendable {
             let decodedResponse = try JSONDecoder().decode(ModelListResponse.self, from: data)
             // Map ModelInfo to CombinedModelInfo
             let combinedModels = decodedResponse.data.map {
-                CombinedModelInfo(id: $0.id, displayName: $0.id, type: .remote)
+                CombinedModelInfo(id: "remote:\($0.id)", displayName: $0.id, type: .remote)
             }
             return combinedModels
         } catch {
