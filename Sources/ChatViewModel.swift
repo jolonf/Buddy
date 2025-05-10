@@ -202,14 +202,29 @@ class ChatViewModel: ObservableObject {
             connectionError = "No model selected or the selected model is invalid."
             return
         }
+
+        guard !isSendingMessage else {
+            print("Already sending a message.")
+            return
+        }
+
+        isSendingMessage = true
+        isAwaitingFirstToken = true
+        connectionError = nil
+
+        // Append user message immediately
+        let userMessage = ChatMessage(role: .user, content: currentInput)
+        messages.append(userMessage)
+        let historyForRequest = messages
+        let interactionModeForRequest = interactionMode
+        let systemPrompt = loadSystemPrompt()
+        currentInput = ""
+
+        // Cancel any previous stream task
+        chatStreamTask?.cancel()
+
+        // For local models, ensure the model is loaded
         if model.type == .local {
-            guard !isSendingMessage else {
-                print("Already sending a message.")
-                return
-            }
-            isSendingMessage = true
-            isAwaitingFirstToken = true
-            connectionError = nil
             Task {
                 await loadSelectedLocalModelIfNeeded()
                 if case .error(let errMsg) = localModelLoadingState {
@@ -218,203 +233,110 @@ class ChatViewModel: ObservableObject {
                     isAwaitingFirstToken = false
                     return
                 }
-                let userMessage = ChatMessage(role: .user, content: currentInput)
-                messages.append(userMessage)
-                let historyForRequest = messages
-                let interactionModeForRequest = interactionMode
-                let systemPrompt = loadSystemPrompt()
-                currentInput = ""
-                chatStreamTask?.cancel()
-                chatStreamTask = Task {
-                    var assistantResponseMessage = ChatMessage(role: .assistant, content: "")
-                    var messageIndex: Int? = nil
-                    do {
-                        let additionalContext: [String: ContextValue] = ["enable_thinking": .bool(thinkingEnabled)]
-                        let stream = localChatService.sendMessage(
-                            history: historyForRequest,
-                            systemPrompt: systemPrompt,
-                            model: model,
-                            interactionMode: interactionModeForRequest,
-                            additionalContext: additionalContext
-                        )
-                        for try await update in stream {
-                            if Task.isCancelled { break }
-                            switch update {
-                            case .contentDelta(let deltaContent):
-                                if isAwaitingFirstToken { isAwaitingFirstToken = false }
-                                assistantResponseMessage.content += deltaContent
-                                if messageIndex == nil {
-                                    messages.append(assistantResponseMessage)
-                                    messageIndex = messages.count - 1
-                                } else {
-                                    messages[messageIndex!].content = assistantResponseMessage.content
-                                }
-                                scrollTrigger = UUID()
-                            case .usage(let usageMetrics):
-                                if let index = messageIndex {
-                                    messages[index].promptTokenCount = usageMetrics.prompt_tokens
-                                    messages[index].tokenCount = usageMetrics.completion_tokens
-                                    messages[index].promptTime = usageMetrics.prompt_time
-                                    messages[index].generationTime = usageMetrics.generation_time
-                                }
-                            case .firstTokenTime(let ttft):
-                                assistantResponseMessage.ttft = ttft
-                                if let index = messageIndex { messages[index].ttft = ttft }
-                            case .finalMetrics(let tps, let tokenCount):
-                                if let index = messageIndex {
-                                    messages[index].tps = tps
-                                    if messages[index].tokenCount == nil { messages[index].tokenCount = tokenCount }
-                                }
-                            case .error(let error):
-                                print("Stream error: \(error)")
-                                connectionError = "Stream error: \(error.localizedDescription)"
-                            }
-                        }
-
-                        if Task.isCancelled {
-                            print("Local chat stream task cancelled.")
-                        } else {
-                            print("Local chat stream finished.")
-                            if interactionModeForRequest == .agent, let msgIndex = messageIndex, msgIndex < messages.count {
-                                let finalContent = messages[msgIndex].content
-                                Task {
-                                    await self.actionHandler.parseAndExecuteActions(responseContent: finalContent, originalMessageIndex: msgIndex)
-                                }
-                            }
-                        }
-                    } catch {
-                        if !(error is CancellationError) {
-                            print("Error processing local chat stream: \(error)")
-                            connectionError = "Chat error: \(error.localizedDescription)"
-                        }
-                    }
-                    isSendingMessage = false
-                    isAwaitingFirstToken = false
-                    chatStreamTask = nil
-                }
-            }
-            return
-        }
-
-        // Remote model (existing logic)
-        guard model.type == .remote else {
-            print("Error: Unknown model type.")
-            connectionError = "Unknown model type."
-            return
-        }
-        guard !isSendingMessage else {
-            print("Already sending a message.")
-            return
-        }
-        isSendingMessage = true
-        isAwaitingFirstToken = true // Set awaiting flag before starting task
-        connectionError = nil // Clear previous errors
-
-        // Append user message immediately
-        let userMessage = ChatMessage(role: .user, content: currentInput)
-        messages.append(userMessage)
-        let historyForRequest = messages // Capture current history *before* potential assistant response
-        let interactionModeForRequest = interactionMode // Capture current mode
-        let systemPrompt = loadSystemPrompt()
-        currentInput = "" // Clear input field
-
-        // Cancel any previous stream task before starting a new one
-        chatStreamTask?.cancel()
-
-        chatStreamTask = Task {
-            var assistantResponseMessage = ChatMessage(role: .assistant, content: "")
-            var messageIndex: Int? = nil // Index in the `messages` array
-
-            do {
-                let stream = remoteChatService.sendMessage(
+                await handleMessageStream(
+                    service: localChatService,
+                    model: model,
                     history: historyForRequest,
                     systemPrompt: systemPrompt,
-                    model: model, // Pass the selected CombinedModelInfo
+                    interactionMode: interactionModeForRequest,
+                    additionalContext: ["enable_thinking": .bool(thinkingEnabled)]
+                )
+            }
+        } else {
+            // Remote model handling
+            Task {
+                await handleMessageStream(
+                    service: remoteChatService,
+                    model: model,
+                    history: historyForRequest,
+                    systemPrompt: systemPrompt,
                     interactionMode: interactionModeForRequest
                 )
+            }
+        }
+    }
 
-                for try await update in stream {
-                    // Check for cancellation after each stream item
-                    if Task.isCancelled { break }
+    private func handleMessageStream(
+        service: ChatService,
+        model: CombinedModelInfo,
+        history: [ChatMessage],
+        systemPrompt: String,
+        interactionMode: InteractionMode,
+        additionalContext: [String: ContextValue]? = nil
+    ) async {
+        var assistantResponseMessage = ChatMessage(role: .assistant, content: "")
+        var messageIndex: Int? = nil
 
-                    switch update {
-                    case .contentDelta(let deltaContent):
-                        if isAwaitingFirstToken {
-                            isAwaitingFirstToken = false // Reset on first token
-                        }
-                        assistantResponseMessage.content += deltaContent
-                        if messageIndex == nil {
-                            // First content delta, add the message
-                            messages.append(assistantResponseMessage)
-                            messageIndex = messages.count - 1
-                        } else {
-                            // Subsequent deltas, update existing message
-                            messages[messageIndex!].content = assistantResponseMessage.content
-                        }
-                        // Update scroll trigger whenever content changes
-                        scrollTrigger = UUID()
+        do {
+            let stream = service.sendMessage(
+                history: history,
+                systemPrompt: systemPrompt,
+                model: model,
+                interactionMode: interactionMode,
+                additionalContext: additionalContext
+            )
 
-                    case .usage(let usageMetrics):
-                        print("DEBUG: Received usage metrics: \(usageMetrics)")
-                        if let index = messageIndex {
-                            messages[index].promptTokenCount = usageMetrics.prompt_tokens
-                            messages[index].tokenCount = usageMetrics.completion_tokens // Update final token count
-                            messages[index].promptTime = usageMetrics.prompt_time
-                            messages[index].generationTime = usageMetrics.generation_time
-                        }
+            for try await update in stream {
+                if Task.isCancelled { break }
 
-                    case .firstTokenTime(let ttft):
-                        print("DEBUG: Received TTFT: \(ttft)")
-                        assistantResponseMessage.ttft = ttft // Store temporarily
-                        if let index = messageIndex {
-                            messages[index].ttft = ttft // Update if message exists
-                        }
-
-                    case .finalMetrics(let tps, let tokenCount):
-                        print("DEBUG: Received final metrics - TPS: \(tps ?? -1), Tokens: \(tokenCount)")
-                        if let index = messageIndex {
-                            messages[index].tps = tps
-                            // Usage might arrive later, so tokenCount from usage is preferred if available
-                            if messages[index].tokenCount == nil {
-                                messages[index].tokenCount = tokenCount
-                            }
-                        }
-
-                    case .error(let error):
-                        print("Stream error: \(error)")
-                        connectionError = "Stream error: \(error.localizedDescription)"
-                        // Potentially break or handle differently
+                switch update {
+                case .contentDelta(let deltaContent):
+                    if isAwaitingFirstToken { isAwaitingFirstToken = false }
+                    assistantResponseMessage.content += deltaContent
+                    if messageIndex == nil {
+                        messages.append(assistantResponseMessage)
+                        messageIndex = messages.count - 1
+                    } else {
+                        messages[messageIndex!].content = assistantResponseMessage.content
                     }
-                } // End of stream loop
+                    scrollTrigger = UUID()
 
-                // --- Stream finished successfully (or cancelled) ---
-                if Task.isCancelled {
-                    print("Chat stream task cancelled.")
-                } else {
-                    print("Chat stream finished.")
-                    // --- Action Parsing (After Stream Ends) ---
-                    if interactionModeForRequest == .agent, let msgIndex = messageIndex, msgIndex < messages.count {
-                        let finalContent = messages[msgIndex].content
-                        // Don't await here, let it run concurrently
-                        Task {
-                            await self.actionHandler.parseAndExecuteActions(responseContent: finalContent, originalMessageIndex: msgIndex)
-                        }
+                case .usage(let usageMetrics):
+                    if let index = messageIndex {
+                        messages[index].promptTokenCount = usageMetrics.prompt_tokens
+                        messages[index].tokenCount = usageMetrics.completion_tokens
+                        messages[index].promptTime = usageMetrics.prompt_time
+                        messages[index].generationTime = usageMetrics.generation_time
                     }
-                }
 
-            } catch {
-                // Handle errors thrown by the service call itself or stream setup
-                if !(error is CancellationError) {
-                    print("Error processing chat stream: \(error)")
-                    connectionError = "Chat error: \(error.localizedDescription)"
+                case .firstTokenTime(let ttft):
+                    assistantResponseMessage.ttft = ttft
+                    if let index = messageIndex { messages[index].ttft = ttft }
+
+                case .finalMetrics(let tps, let tokenCount):
+                    if let index = messageIndex {
+                        messages[index].tps = tps
+                        if messages[index].tokenCount == nil { messages[index].tokenCount = tokenCount }
+                    }
+
+                case .error(let error):
+                    print("Stream error: \(error)")
+                    connectionError = "Stream error: \(error.localizedDescription)"
                 }
             }
 
-            // --- Cleanup regardless of how the task ended ---
-            isSendingMessage = false
-            isAwaitingFirstToken = false
-            chatStreamTask = nil
+            if Task.isCancelled {
+                print("Chat stream task cancelled.")
+            } else {
+                print("Chat stream finished.")
+                if interactionMode == .agent, let msgIndex = messageIndex, msgIndex < messages.count {
+                    let finalContent = messages[msgIndex].content
+                    Task {
+                        await self.actionHandler.parseAndExecuteActions(responseContent: finalContent, originalMessageIndex: msgIndex)
+                    }
+                }
+            }
+
+        } catch {
+            if !(error is CancellationError) {
+                print("Error processing chat stream: \(error)")
+                connectionError = "Chat error: \(error.localizedDescription)"
+            }
         }
+
+        isSendingMessage = false
+        isAwaitingFirstToken = false
+        chatStreamTask = nil
     }
 
     // --- Action Parsing & Execution ---
