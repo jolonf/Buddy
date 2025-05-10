@@ -270,6 +270,7 @@ class ChatViewModel: ObservableObject {
                                 connectionError = "Stream error: \(error.localizedDescription)"
                             }
                         }
+
                         if Task.isCancelled {
                             print("Local chat stream task cancelled.")
                         } else {

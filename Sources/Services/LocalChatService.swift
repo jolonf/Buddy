@@ -115,13 +115,8 @@ class LocalChatService: ChatService, @unchecked Sendable {
                     for message in mlxMessages {
                         print("\u{001B}[0;36m\(message.role)\u{001B}[0m \u{001B}[0;33m\(message.content.prefix(80))\u{001B}[0m\(message.content.count > 80 ? "..." : "")")
                     }
-                    // Convert additionalContext to [String: Any] for UserInput
-                    let contextForUserInput: [String: Any]? = additionalContext?.mapValues { $0.anyValue }
-                    print("[LocalChatService] additionalContext: \(String(describing: contextForUserInput))")
-                    if let enableThinking = contextForUserInput?["enable_thinking"] {
-                        print("[LocalChatService] enable_thinking: \(enableThinking)")
-                    }
-                    let userInput = UserInput(chat: mlxMessages, additionalContext: contextForUserInput)
+
+                    let userInput = UserInput(chat: mlxMessages, additionalContext: additionalContext?.mapValues { $0.anyValue })
                     let generationStreamResult: AsyncStream<Generation> = try await container.perform { (context: ModelContext) -> AsyncStream<Generation> in
                         let parameters = GenerateParameters(temperature: 0.7)
 

@@ -23,7 +23,7 @@ let package = Package(
         // Reference the specific fork and branch for examples
         .package(url: "https://github.com/jolonf/mlx-swift-examples", branch: "feature/prompt-caching"),
         // Add Hugging Face Swift Transformers package
-        .package(url: "https://github.com/huggingface/swift-transformers", from: "0.1.17")
+        .package(url: "https://github.com/huggingface/swift-transformers", from: "0.1.17"),
     ],
     targets: [
         .executableTarget(
@@ -41,9 +41,7 @@ let package = Package(
                 .product(name: "MLXLLM", package: "mlx-swift-examples"),
                 .product(name: "MLXLMCommon", package: "mlx-swift-examples"),
                 // Products from huggingface/swift-transformers
-                // CHANGE: package name from "swift-transformers" to "Transformers"
                 .product(name: "Transformers", package: "swift-transformers"),
-                // .product(name: "Tokenizers", package: "swift-transformers"), // Add if MLXLLM doesn't provide its own
             ],
             path: ".",
             // Exclude common directories from the build target
