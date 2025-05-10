@@ -98,9 +98,13 @@ struct ChatView: View {
             }
             .id("MessageListBottom") // For scrolling
 
-            // --- Agent Mode Toggle --- 
-            Toggle("Agent Mode", isOn: viewModel.isAgentModeBinding)
-            .toggleStyle(.checkbox) // Use checkbox style on macOS
+            // --- Agent Mode and Thinking Toggles --- 
+            HStack {
+                Toggle("Agent Mode", isOn: viewModel.isAgentModeBinding)
+                    .toggleStyle(.checkbox) // Use checkbox style on macOS
+                Toggle("Thinking", isOn: viewModel.isThinkingEnabledBinding)
+                    .toggleStyle(.checkbox)
+            }
             .padding(.horizontal)
             .padding(.top, 8) // Add top padding
             .padding(.bottom, 4)

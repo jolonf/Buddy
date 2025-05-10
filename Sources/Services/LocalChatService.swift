@@ -86,15 +86,14 @@ class LocalChatService: ChatService, @unchecked Sendable {
         history: [ChatMessage],
         systemPrompt: String,
         model: CombinedModelInfo,
-        interactionMode: InteractionMode
+        interactionMode: InteractionMode,
+        additionalContext: [String: ContextValue]? = nil
     ) -> AsyncThrowingStream<ChatStreamUpdate, Error> {
         print("DEBUG: sendMessage() called in LocalChatService for model \(model.displayName)")
-        
         guard let container = currentModelContainer, model.id == currentModelId else {
             let error = NSError(domain: "LocalChatService", code: -2, userInfo: [NSLocalizedDescriptionKey: "Model \(model.displayName) is not loaded or does not match the current loaded model."])
             return AsyncThrowingStream { $0.finish(throwing: error) }
         }
-        
         return AsyncThrowingStream(ChatStreamUpdate.self, bufferingPolicy: .unbounded) { continuation in
             self.generationTask = Task {
                 do {
@@ -113,15 +112,21 @@ class LocalChatService: ChatService, @unchecked Sendable {
                         }
                         mlxMessages.append(Chat.Message(role: role, content: messageItem.content))
                     }
-
                     for message in mlxMessages {
                         print("\u{001B}[0;36m\(message.role)\u{001B}[0m \u{001B}[0;33m\(message.content.prefix(80))\u{001B}[0m\(message.content.count > 80 ? "..." : "")")
                     }
-
-                    let userInput = UserInput(chat: mlxMessages)
-
+                    // Convert additionalContext to [String: Any] for UserInput
+                    let contextForUserInput: [String: Any]? = additionalContext?.mapValues { $0.anyValue }
+                    print("[LocalChatService] additionalContext: \(String(describing: contextForUserInput))")
+                    if let enableThinking = contextForUserInput?["enable_thinking"] {
+                        print("[LocalChatService] enable_thinking: \(enableThinking)")
+                    }
+                    let userInput = UserInput(chat: mlxMessages, additionalContext: contextForUserInput)
                     let generationStreamResult: AsyncStream<Generation> = try await container.perform { (context: ModelContext) -> AsyncStream<Generation> in
                         let parameters = GenerateParameters(temperature: 0.7)
+
+                        let fullPromptLmInput = try await context.processor.prepare(input: userInput)
+
                         if self.currentPromptCache == nil {
                             print("PromptCache was nil, initializing inside perform for model \(self.currentModelId ?? "unknown").")
                             self.currentPromptCache = PromptCache(cache: context.model.newCache(parameters: parameters))
@@ -129,7 +134,7 @@ class LocalChatService: ChatService, @unchecked Sendable {
                         guard let cacheForThisGeneration = self.currentPromptCache else {
                             throw NSError(domain: "LocalChatService", code: -5, userInfo: [NSLocalizedDescriptionKey: "Prompt cache is unexpectedly nil after attempted initialization."])
                         }
-                        let fullPromptLmInput = try await context.processor.prepare(input: userInput)
+
                         var lmInputForGeneration: LMInput
                         var kvCachesForGeneration: [KVCache]
                         if let suffixTokens = cacheForThisGeneration.getUncachedSuffix(prompt: fullPromptLmInput.text.tokens) {
@@ -150,18 +155,15 @@ class LocalChatService: ChatService, @unchecked Sendable {
                             cache: kvCachesForGeneration
                         )
                     }
-                    
                     for try await generationUpdate in generationStreamResult {
                         if Task.isCancelled {
                             print("LocalChatService generation task cancelled during streaming.")
                             continuation.finish()
                             return
                         }
-                        
                         switch generationUpdate {
                         case .chunk(let textDelta):
                             continuation.yield(.contentDelta(textDelta))
-                        
                         case .info(let completionInfo):
                             let usageMetrics = ChatUsageMetrics(
                                 prompt_tokens: completionInfo.promptTokenCount,
@@ -174,7 +176,6 @@ class LocalChatService: ChatService, @unchecked Sendable {
                         }
                     }
                     continuation.finish()
-
                 } catch {
                     if Task.isCancelled && error is CancellationError {
                         print("LocalChatService Task was cancelled before or during generation setup.")
@@ -185,7 +186,6 @@ class LocalChatService: ChatService, @unchecked Sendable {
                     }
                 }
             }
-
             continuation.onTermination = { @Sendable _ in
                 print("AsyncThrowingStream terminated. Cancelling associated generation task.")
                 Task {

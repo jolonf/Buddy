@@ -46,7 +46,8 @@ class RemoteChatService: ChatService, @unchecked Sendable {
         history: [ChatMessage],
         systemPrompt: String,
         model: CombinedModelInfo,
-        interactionMode: InteractionMode
+        interactionMode: InteractionMode,
+        additionalContext: [String: ContextValue]? = nil
     ) -> AsyncThrowingStream<ChatStreamUpdate, Error> {
         // TODO: Move streaming logic from ChatViewModel.performStreamingRequest here
         print("DEBUG: sendMessage() called in RemoteChatService for model \(model.id)")

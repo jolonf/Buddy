@@ -46,6 +46,7 @@ class ChatViewModel: ObservableObject {
     // Trigger for auto-scrolling chat on content updates
     @Published var scrollTrigger: UUID = UUID()
     @Published var isAwaitingFirstToken: Bool = false // <<< ADD STATE
+    @AppStorage("thinkingEnabled") var thinkingEnabled: Bool = true
 
     // Computed property for Agent Mode Toggle binding
     var isAgentModeBinding: Binding<Bool> {
@@ -195,17 +196,13 @@ class ChatViewModel: ObservableObject {
 
     func sendMessage() {
         guard !currentInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
-        // Find the selected CombinedModelInfo based on the ID
         guard let currentModelId = selectedModelId,
               let model = availableModels.first(where: { $0.id == currentModelId }) else {
             print("Error: No model selected or found.")
             connectionError = "No model selected or the selected model is invalid."
             return
         }
-
-        // Step 5: Handle local and remote models
         if model.type == .local {
-            // Local model: ensure loaded, then send message
             guard !isSendingMessage else {
                 print("Already sending a message.")
                 return
@@ -214,33 +211,31 @@ class ChatViewModel: ObservableObject {
             isAwaitingFirstToken = true
             connectionError = nil
             Task {
-                // Ensure the model is loaded
                 await loadSelectedLocalModelIfNeeded()
-                // Check if loading failed
                 if case .error(let errMsg) = localModelLoadingState {
                     connectionError = "Local model load error: \(errMsg)"
                     isSendingMessage = false
                     isAwaitingFirstToken = false
                     return
                 }
-                // Append user message immediately
                 let userMessage = ChatMessage(role: .user, content: currentInput)
                 messages.append(userMessage)
                 let historyForRequest = messages
                 let interactionModeForRequest = interactionMode
                 let systemPrompt = loadSystemPrompt()
                 currentInput = ""
-                // Cancel any previous stream task before starting a new one
                 chatStreamTask?.cancel()
                 chatStreamTask = Task {
                     var assistantResponseMessage = ChatMessage(role: .assistant, content: "")
                     var messageIndex: Int? = nil
                     do {
+                        let additionalContext: [String: ContextValue] = ["enable_thinking": .bool(thinkingEnabled)]
                         let stream = localChatService.sendMessage(
                             history: historyForRequest,
                             systemPrompt: systemPrompt,
                             model: model,
-                            interactionMode: interactionModeForRequest
+                            interactionMode: interactionModeForRequest,
+                            additionalContext: additionalContext
                         )
                         for try await update in stream {
                             if Task.isCancelled { break }
@@ -577,6 +572,13 @@ class ChatViewModel: ObservableObject {
                 localModelLoadingState = .error(error.localizedDescription)
             }
         }
+    }
+
+    var isThinkingEnabledBinding: Binding<Bool> {
+        Binding(
+            get: { self.thinkingEnabled },
+            set: { self.thinkingEnabled = $0 }
+        )
     }
 }
  

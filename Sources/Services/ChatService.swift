@@ -31,7 +31,7 @@ enum ChatStreamUpdate {
 }
 
 /// Protocol defining the interface for interacting with a chat service (local or remote).
-protocol ChatService {
+protocol ChatService: AnyObject {
     /// Fetches the list of models available from the service.
     func fetchAvailableModels() async throws -> [CombinedModelInfo]
 
@@ -41,12 +41,14 @@ protocol ChatService {
     ///   - systemPrompt: The system prompt to use for the interaction.
     ///   - model: The specific model (local or remote) to use.
     ///   - interactionMode: The current mode (e.g., ask or agent).
+    ///   - additionalContext: An optional additional context for the interaction.
     /// - Returns: An asynchronous throwing stream of `ChatStreamUpdate`.
     func sendMessage(
         history: [ChatMessage],
         systemPrompt: String,
         model: CombinedModelInfo,
-        interactionMode: InteractionMode // Need InteractionMode definition available
+        interactionMode: InteractionMode,
+        additionalContext: [String: ContextValue]?
     ) -> AsyncThrowingStream<ChatStreamUpdate, Error>
 
     /// Cancels any ongoing request associated with the service.
@@ -92,3 +94,19 @@ extension ChatService {
 // Custom initializer if needed, or rely on memberwise
 
 // Custom initializer if needed, or rely on memberwise
+
+enum ContextValue: Sendable {
+    case bool(Bool)
+    case int(Int)
+    case double(Double)
+    case string(String)
+
+    var anyValue: Any {
+        switch self {
+        case .bool(let b): return b
+        case .int(let i): return i
+        case .double(let d): return d
+        case .string(let s): return s
+        }
+    }
+}
