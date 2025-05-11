@@ -21,20 +21,6 @@ struct ChatView: View {
                     Text("Local Model Error: \(error)")
                         .foregroundColor(.red)
                         .padding(.horizontal)
-                } else if case .loading(let progress) = viewModel.localModelLoadingState {
-                    HStack {
-                        if let progress = progress {
-                            ProgressView(value: progress)
-                                .frame(width: 80)
-                            Text(String(format: "Loading model... %.0f%%", progress * 100))
-                                .foregroundColor(.secondary)
-                        } else {
-                            ProgressView()
-                                .scaleEffect(0.8)
-                            Text("Loading model...")
-                                .foregroundColor(.secondary)
-                        }
-                    }
                 } else if viewModel.isLoadingModels {
                     HStack {
                         ProgressView()
@@ -66,8 +52,26 @@ struct ChatView: View {
                                 .id(message.id) // ID for scrolling
                         }
                         
-                        // --- Typing Indicator (moved inside LazyVStack) ---
-                        if viewModel.isAwaitingFirstToken {
+                        // --- Inline Loading Indicator or Typing Indicator ---
+                        if case .loading(let progress) = viewModel.localModelLoadingState {
+                            HStack(spacing: 8) {
+                                if let progress = progress {
+                                    ProgressView(value: progress)
+                                        .frame(width: 80)
+                                    Text(String(format: "Loading model... %.0f%%", progress * 100))
+                                        .foregroundColor(.secondary)
+                                } else {
+                                    ProgressView()
+                                        .scaleEffect(0.8)
+                                    Text("Loading model...")
+                                        .foregroundColor(.secondary)
+                                }
+                            }
+                            .padding(.vertical, 8)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .id("loadingIndicator")
+                            .transition(.opacity)
+                        } else if viewModel.isAwaitingFirstToken {
                             TypingIndicatorView()
                                 .id("typingIndicator") // Add ID for potential scrolling target
                                 .transition(.opacity) // Fade in/out
@@ -80,6 +84,14 @@ struct ChatView: View {
                         if let lastMessageId = viewModel.messages.last?.id {
                             withAnimation {
                                 proxy.scrollTo(lastMessageId, anchor: .bottom)
+                            }
+                        } else if case .loading = viewModel.localModelLoadingState {
+                            withAnimation {
+                                proxy.scrollTo("loadingIndicator", anchor: .bottom)
+                            }
+                        } else if viewModel.isAwaitingFirstToken {
+                            withAnimation {
+                                proxy.scrollTo("typingIndicator", anchor: .bottom)
                             }
                         }
                     }
