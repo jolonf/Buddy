@@ -7,10 +7,22 @@ import AppKit // Needed for NSApplication
 // MARK: - AppDelegate
 // Conforms to NSApplicationDelegate to handle app lifecycle events
 class AppDelegate: NSObject, NSApplicationDelegate {
+
+    weak var viewModel: ChatViewModel?
+
     // This method is called when the last window of the application is closed.
     // Returning true ensures the application terminates.
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         return true
+    }
+
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        // Wait until we have finished generating
+        viewModel?.shutDown {
+            sender.reply(toApplicationShouldTerminate: true)
+        }
+        
+        return .terminateLater
     }
 }
 #endif
@@ -89,6 +101,9 @@ struct BuddyApp: App {
             .environmentObject(chatViewModel)
             .environmentObject(commandRunnerViewModel)
             .environmentObject(fileContentViewModel)
+            .onAppear {
+                self.appDelegate.viewModel = chatViewModel
+            }
         }
     }
 } 

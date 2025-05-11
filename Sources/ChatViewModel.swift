@@ -503,5 +503,20 @@ class ChatViewModel: ObservableObject {
             set: { self.thinkingEnabled = $0 }
         )
     }
+
+    func shutDown(completion: @escaping () -> Void) {
+        // Cancel generate task
+        Task { @MainActor in
+            chatStreamTask?.cancel()
+            
+            await chatStreamTask?.value
+            
+            // Unload models and cache (otherwise will crash on bad access)
+            localChatService.unloadLocalModel()
+            
+            // Finish
+            completion()
+        }
+    }
 }
  

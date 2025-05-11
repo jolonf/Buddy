@@ -63,7 +63,7 @@ protocol ChatService: AnyObject {
 
     /// Unloads the currently loaded local model from memory.
     /// Default implementation could do nothing.
-    func unloadLocalModel() async
+    func unloadLocalModel()
 }
 
 // Provide default implementations for optional methods
@@ -73,7 +73,7 @@ extension ChatService {
         print("Warning: loadLocalModel not implemented by \(type(of: self))")
     }
 
-    func unloadLocalModel() async {
+    func unloadLocalModel() {
         // Default: Do nothing
         print("Warning: unloadLocalModel not implemented by \(type(of: self))")
     }

@@ -206,7 +206,7 @@ class LocalChatService: ChatService, @unchecked Sendable {
         print("DEBUG: loadLocalModel() called in LocalChatService for model \(modelInfo.displayName)")
 
         if currentModelContainer != nil {
-            await unloadLocalModel()
+            unloadLocalModel()
         }
         
         do {
@@ -240,7 +240,7 @@ class LocalChatService: ChatService, @unchecked Sendable {
         }
     }
 
-    func unloadLocalModel() async {
+    func unloadLocalModel() {
         print("DEBUG: unloadLocalModel() called in LocalChatService for model \(currentModelId ?? "unknown")")
         doCancelGenerationTask()
         currentModelContainer = nil
