@@ -256,6 +256,25 @@ class ChatViewModel: ObservableObject {
         }
     }
 
+    // Add helper function to handle thinking blocks
+    private func handleThinkingBlock(_ content: String) -> String {
+        let trimmedContent = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmedContent.hasPrefix("<think>") else {
+            return content
+        }
+        
+        // If we find a complete thinking block, remove it and return the remaining content
+        if let endTagRange = trimmedContent.range(of: "</think>") {
+            let remainingStart = endTagRange.upperBound
+            let remainingContent = String(trimmedContent[remainingStart...])
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            return remainingContent
+        }
+        
+        // If no end tag found, return the original content (thinking block is still in progress)
+        return content
+    }
+
     private func handleMessageStream(
         service: ChatService,
         model: CombinedModelInfo,
@@ -283,11 +302,20 @@ class ChatViewModel: ObservableObject {
                 case .contentDelta(let deltaContent):
                     if isAwaitingFirstToken { isAwaitingFirstToken = false }
                     assistantResponseMessage.content += deltaContent
+                    
+                    // Check if we have a complete thinking block
+                    let processedContent = handleThinkingBlock(assistantResponseMessage.content)
+                    
                     if messageIndex == nil {
-                        messages.append(assistantResponseMessage)
-                        messageIndex = messages.count - 1
+                        // Only create new message if we have content after processing
+                        if !processedContent.isEmpty {
+                            assistantResponseMessage.content = processedContent
+                            messages.append(assistantResponseMessage)
+                            messageIndex = messages.count - 1
+                        }
                     } else {
-                        messages[messageIndex!].content = assistantResponseMessage.content
+                        // Update existing message with processed content
+                        messages[messageIndex!].content = processedContent
                     }
                     scrollTrigger = UUID()
 
