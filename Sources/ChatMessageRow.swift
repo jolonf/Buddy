@@ -44,12 +44,70 @@ private extension ChatMessageRow {
     
     func assistantMessageView(for message: ChatMessage) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(.init(message.content))
-                .padding(.horizontal, 5)
-                .padding(.vertical, 4)
-                .textSelection(.enabled)
+            if let (thinkingContent, remainingContent) = parseThinkingBlock(message.content) {
+                // Display thinking block with special styling
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Thinking...")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .padding(.bottom, 2)
+                    
+                    Text(.init(thinkingContent))
+                        .italic()
+                        .foregroundColor(.secondary)
+                        .padding(8)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(Color.secondary.opacity(0.1))
+                        .cornerRadius(6)
+                        .textSelection(.enabled)
+                }
+                .padding(.bottom, 4)
+                
+                // Display remaining content if any
+                if !remainingContent.isEmpty {
+                    Text(.init(remainingContent))
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 4)
+                        .textSelection(.enabled)
+                }
+            } else {
+                // Regular message without thinking block
+                Text(.init(message.content))
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 4)
+                    .textSelection(.enabled)
+            }
             
             MessageStatsView(message: message)
+        }
+    }
+    
+    private func parseThinkingBlock(_ content: String) -> (thinking: String, remaining: String)? {
+        // Look for <think> at the start of the content
+        let trimmedContent = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmedContent.hasPrefix("<think>") else {
+            return nil
+        }
+        
+        // Check if there's a closing tag
+        if let endTagRange = trimmedContent.range(of: "</think>") {
+            // Complete thinking block - extract content and remaining text
+            let thinkingStart = trimmedContent.index(trimmedContent.startIndex, offsetBy: "<think>".count) // Skip "<think>"
+            let thinkingContent = String(trimmedContent[thinkingStart..<endTagRange.lowerBound])
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            
+            let remainingStart = endTagRange.upperBound
+            let remainingContent = String(trimmedContent[remainingStart...])
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            
+            return (thinkingContent, remainingContent)
+        } else {
+            // Incomplete thinking block - treat entire content as thinking
+            let thinkingStart = trimmedContent.index(trimmedContent.startIndex, offsetBy: "<think>".count) // Skip "<think>"
+            let thinkingContent = String(trimmedContent[thinkingStart...])
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            
+            return (thinkingContent, "")
         }
     }
 }
